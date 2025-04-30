@@ -1,10 +1,13 @@
 package main
 
 import (
+	"github.com/14kear/forum-project/auth-service/internal/app"
 	"github.com/14kear/forum-project/auth-service/internal/config"
 	"github.com/14kear/forum-project/auth-service/internal/lib/logger/handlers/slogpretty"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 const (
@@ -20,7 +23,21 @@ func main() {
 
 	log.Info("Starting up auth service", slog.Any("config", cfg)) // временно, УБРАТЬ В БУДУЩЕМ
 
-	// TODO: инициализировать приложение (app)
+	application := app.NewApp(log, cfg.GRPC.Port, cfg.StoragePath, cfg.TokenTTl)
+
+	go application.GRPCServer.MustRun()
+
+	// получаем сигнал от системы и сама занимается завершением себя
+	// Graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+
+	// висим на этой строчке, блокирующая операция
+	signl := <-stop
+	log.Info("Shutting down auth service", slog.String("signal", signl.String()))
+	application.GRPCServer.Stop()
+	log.Info("Application stopped")
+
 }
 
 func setupLogger(env string) *slog.Logger {
