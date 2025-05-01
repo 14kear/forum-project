@@ -38,6 +38,7 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidAppID       = errors.New("invalid app id")
 	ErrUserExists         = errors.New("user already exists")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 // NewAuth return a new instance of the Auth service
@@ -80,7 +81,7 @@ func (auth *Auth) Login(ctx context.Context, email, password string, appID int) 
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
-		auth.log.Warn("invalid credentials", sl.Err(err))
+		auth.log.Info("invalid credentials", sl.Err(err))
 		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
@@ -92,7 +93,7 @@ func (auth *Auth) Login(ctx context.Context, email, password string, appID int) 
 
 	token, err := jwt.NewToken(user, app, auth.tokenTTL)
 	if err != nil {
-		auth.log.Warn("failed to generate token", sl.Err(err))
+		auth.log.Error("failed to generate token", sl.Err(err))
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 	return token, nil
@@ -111,7 +112,7 @@ func (auth *Auth) RegisterNewUser(ctx context.Context, email string, pass string
 	// хэш пароля + соль
 	passHash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		log.Error("failed to hash password", sl.Err(err))
+		log.Error("failed to generate hash password", sl.Err(err))
 
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -119,7 +120,7 @@ func (auth *Auth) RegisterNewUser(ctx context.Context, email string, pass string
 	id, err := auth.userSaver.SaveUser(ctx, email, passHash)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserAlreadyExists) {
-			auth.log.Warn("user already exists", sl.Err(err))
+			log.Warn("user already exists", sl.Err(err))
 			return 0, fmt.Errorf("%s: %w", op, ErrUserExists)
 		}
 		log.Error("failed to save user", sl.Err(err))
@@ -141,7 +142,7 @@ func (auth *Auth) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 	isAdmin, err := auth.userProvider.IsAdmin(ctx, userID)
 	if err != nil {
 		if errors.Is(err, storage.ErrAppNotFound) {
-			auth.log.Warn("app not found", sl.Err(err))
+			log.Warn("app not found", sl.Err(err))
 			return false, fmt.Errorf("%s: %w", op, ErrInvalidAppID)
 		}
 		return false, fmt.Errorf("%s: %w", op, err)
