@@ -33,7 +33,8 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  string token = 1; // Auth token of the logged in user.
+  string access_token = 1;  // Access JWT token
+  string refresh_token = 2; // Refresh JWT token
 }
 
 message IsAdminRequest{
