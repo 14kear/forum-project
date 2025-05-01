@@ -23,6 +23,11 @@ type Auth interface {
 		email string,
 		password string) (userID int64, err error)
 	IsAdmin(ctx context.Context, userID int64) (bool, error)
+	RefreshTokens(
+		ctx context.Context,
+		refreshToken string,
+		appID int,
+	) (newAccessToken string, newRefreshToken string, err error)
 }
 
 type serverAPI struct {
@@ -84,6 +89,15 @@ func (s *serverAPI) IsAdmin(ctx context.Context, req *ssov1.IsAdminRequest) (*ss
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
 	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
+}
+
+func (s *serverAPI) RefreshTokens(ctx context.Context, req *ssov1.RefreshTokenRequest) (*ssov1.RefreshTokenResponse, error) {
+	accessToken, refreshToken, err := s.auth.RefreshTokens(ctx, req.GetRefreshToken(), int(req.GetAppId()))
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid or expired refresh token")
+	}
+
+	return &ssov1.RefreshTokenResponse{AccessToken: accessToken, RefreshToken: refreshToken}, nil
 }
 
 func validateLogin(req *ssov1.LoginRequest) error {

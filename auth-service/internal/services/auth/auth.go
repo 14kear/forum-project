@@ -8,6 +8,7 @@ import (
 	"github.com/14kear/forum-project/auth-service/internal/lib/jwt"
 	"github.com/14kear/forum-project/auth-service/internal/lib/logger/sl"
 	"github.com/14kear/forum-project/auth-service/internal/storage"
+	jwtGo "github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"time"
@@ -153,4 +154,46 @@ func (auth *Auth) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 	}
 	log.Info("user is admin", slog.Bool("isAdmin", isAdmin))
 	return isAdmin, nil
+}
+
+func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID int) (string, string, error) {
+	const op = "auth.RefreshToken"
+
+	app, err := auth.appProvider.App(ctx, appID)
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	token, err := jwtGo.ParseWithClaims(refreshToken, jwtGo.MapClaims{}, func(token *jwtGo.Token) (interface{}, error) {
+		// Проверка метода подписи
+		if _, ok := token.Method.(*jwtGo.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(app.Secret), nil
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("invalid token: %w", err)
+	}
+
+	claims, ok := token.Claims.(jwtGo.MapClaims)
+	if !ok || !token.Valid {
+		return "", "", fmt.Errorf("invalid token claims")
+	}
+
+	if claims["typ"] != "refresh" {
+		return "", "", fmt.Errorf("invalid token type: expected refresh, got %v", claims["typ"])
+	}
+
+	user, err := auth.userProvider.User(ctx, claims["email"].(string))
+	if err != nil {
+		return "", "", fmt.Errorf("%s: failed to get user: %w", op, err)
+	}
+
+	newTokens, err := jwt.NewTokenPair(user, app, auth.accessToken, auth.refreshToken)
+	if err != nil {
+		return "", "", fmt.Errorf("%s: failed to generate token pair: %w", op, err)
+	}
+
+	return newTokens.AccessToken, newTokens.RefreshToken, nil
+
 }
