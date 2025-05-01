@@ -18,7 +18,8 @@ type Auth struct {
 	userSaver    UserSaver
 	userProvider UserProvider
 	appProvider  AppProvider
-	tokenTTL     time.Duration
+	accessToken  time.Duration
+	refreshToken time.Duration
 }
 
 type UserSaver interface {
@@ -47,21 +48,23 @@ func NewAuth(
 	userSaver UserSaver,
 	userProvider UserProvider,
 	appProvider AppProvider,
-	tokenTTL time.Duration,
+	accessToken time.Duration,
+	refreshToken time.Duration,
 ) *Auth {
 	return &Auth{
 		log:          log,
 		userSaver:    userSaver,
 		userProvider: userProvider,
 		appProvider:  appProvider,
-		tokenTTL:     tokenTTL,
+		accessToken:  accessToken,
+		refreshToken: refreshToken,
 	}
 }
 
 // Login checks if user with given credentials exists in the system and returns access token.
 // If user exists, but password is incorrect, returns error.
 // If user doesn`t exist, returns error.
-func (auth *Auth) Login(ctx context.Context, email, password string, appID int) (string, error) {
+func (auth *Auth) Login(ctx context.Context, email, password string, appID int) (string, string, error) {
 	const op = "auth.Login"
 
 	// БЕЗОПАСНОСТЬ! Мб вообще в будущем убрать логирование email
@@ -73,30 +76,31 @@ func (auth *Auth) Login(ctx context.Context, email, password string, appID int) 
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			auth.log.Warn("user not found", sl.Err(err))
-			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
 
 		auth.log.Warn("failed to get user", sl.Err(err))
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
 		auth.log.Info("invalid credentials", sl.Err(err))
-		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	app, err := auth.appProvider.App(ctx, appID)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 	log.Info("successfully logged in")
 
-	token, err := jwt.NewToken(user, app, auth.tokenTTL)
+	tokenPair, err := jwt.NewTokenPair(user, app, auth.accessToken, auth.refreshToken)
 	if err != nil {
-		auth.log.Error("failed to generate token", sl.Err(err))
-		return "", fmt.Errorf("%s: %w", op, err)
+		auth.log.Error("failed to generate token pair", sl.Err(err))
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
-	return token, nil
+
+	return tokenPair.AccessToken, tokenPair.RefreshToken, nil
 }
 
 // RegisterNewUser registers new user in the system and returns user ID.

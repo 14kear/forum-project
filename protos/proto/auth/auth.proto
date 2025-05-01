@@ -12,6 +12,8 @@ service Auth {
   rpc Login (LoginRequest) returns (LoginResponse);
 
   rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
+
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
 }
 
 // Объект, который отправляется при вызове RPC-метода (ручки) Register.
@@ -43,4 +45,16 @@ message IsAdminRequest{
 
 message IsAdminResponse{
   bool is_admin = 1; // Indicates whether the user is an admin.
+}
+
+// Запрос на обновление access токена
+message RefreshTokenRequest {
+  string refresh_token = 1;
+  int32 app_id = 2;
+}
+
+// Ответ с новым access и refresh токеном
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
 }

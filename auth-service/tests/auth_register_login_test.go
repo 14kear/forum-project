@@ -40,24 +40,42 @@ func TestRegisterLogin_Login_HappyPath(t *testing.T) {
 
 	loginTime := time.Now()
 
-	token := respLogin.GetToken()
-	require.NotEmpty(t, token)
+	accessToken := respLogin.GetAccessToken()
+	refreshToken := respLogin.GetRefreshToken()
+	require.NotEmpty(t, accessToken)
+	require.NotEmpty(t, refreshToken)
 
-	tokenParsed, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+	accessTokenParsed, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
 		return []byte(appSecret), nil
 	})
 	require.NoError(t, err)
 
-	claims, ok := tokenParsed.Claims.(jwt.MapClaims)
+	accessClaims, ok := accessTokenParsed.Claims.(jwt.MapClaims)
 	assert.True(t, ok)
 
-	assert.Equal(t, respReg.GetUserId(), int64(claims["uid"].(float64)))
-	assert.Equal(t, email, claims["email"].(string))
-	assert.Equal(t, appID, int(claims["app_id"].(float64)))
+	assert.Equal(t, respReg.GetUserId(), int64(accessClaims["uid"].(float64)))
+	assert.Equal(t, email, accessClaims["email"].(string))
+	assert.Equal(t, appID, int(accessClaims["app_id"].(float64)))
+	assert.Equal(t, "access", accessClaims["typ"])
 
 	const deltaSeconds = 1 // точность до 1 секунды для проверки времени жизни токена
 
-	assert.InDelta(t, loginTime.Add(st.Cfg.TokenTTl).Unix(), claims["exp"].(float64), deltaSeconds)
+	assert.InDelta(t, loginTime.Add(st.Cfg.AccessToken).Unix(), accessClaims["exp"].(float64), deltaSeconds)
+
+	// проверка refresh token`a
+	refreshTokenParsed, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
+		return []byte(appSecret), nil
+	})
+	require.NoError(t, err)
+
+	refreshClaims, ok := refreshTokenParsed.Claims.(jwt.MapClaims)
+	assert.True(t, ok)
+
+	assert.Equal(t, respReg.GetUserId(), int64(refreshClaims["uid"].(float64)))
+	assert.Equal(t, email, refreshClaims["email"].(string))
+	assert.Equal(t, "refresh", refreshClaims["typ"])
+
+	assert.InDelta(t, loginTime.Add(st.Cfg.RefreshToken).Unix(), refreshClaims["exp"].(float64), deltaSeconds)
 }
 
 func randomFakePassword() string {

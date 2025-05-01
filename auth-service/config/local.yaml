@@ -1,6 +1,9 @@
 env: "local"
 storage_path: "postgres://postgres:123456@localhost:5432/auth_db?sslmode=disable"
-token_ttl: 1h
+
+access_ttl: 15m
+refresh_ttl: 168h  # 7 дней
+
 grpc:
   port: 55555
   timeout: 10h
