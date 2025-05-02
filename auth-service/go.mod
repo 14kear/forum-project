@@ -22,6 +22,7 @@ require (
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/rs/cors v1.11.1 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/net v0.38.0 // indirect

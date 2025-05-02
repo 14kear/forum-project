@@ -5,5 +5,8 @@ access_ttl: 15m
 refresh_ttl: 168h  # 7 дней
 
 grpc:
-  port: 55555
+  port: 50051
   timeout: 10h
+
+http:
+  port: 8080

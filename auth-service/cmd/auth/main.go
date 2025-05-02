@@ -1,12 +1,20 @@
 package main
 
 import (
+	"context"
 	"github.com/14kear/forum-project/auth-service/internal/app"
 	"github.com/14kear/forum-project/auth-service/internal/config"
 	"github.com/14kear/forum-project/auth-service/internal/lib/logger/handlers/slogpretty"
+	gw "github.com/14kear/forum-project/protos/gen/go/auth"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/cors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 )
 
@@ -17,27 +25,78 @@ const (
 )
 
 func main() {
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000"}, // Разрешаем доступ с фронта на localhost:3000
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+	})
+
 	cfg := config.MustLoad()
 
 	log := setupLogger(cfg.Env)
 
-	log.Info("Starting up auth service", slog.Any("config", cfg)) // временно, УБРАТЬ В БУДУЩЕМ
+	if cfg.Env == envLocal || cfg.Env == envDev {
+		log.Info("Starting auth service", slog.Any("config", cfg))
+	} else {
+		log.Info("Starting auth service")
+	}
 
 	application := app.NewApp(log, cfg.GRPC.Port, cfg.StoragePath, cfg.AccessToken, cfg.RefreshToken)
 
-	go application.GRPCServer.MustRun()
+	// Channel to listen for errors from goroutines
+	errChan := make(chan error, 2)
 
-	// получаем сигнал от системы, сама занимается завершением себя
+	// Start gRPC server
+	go func() {
+		errChan <- application.GRPCServer.Run()
+	}()
+
+	// Start HTTP gateway
+	gatewayCtx, gatewayCancel := context.WithCancel(context.Background())
+	defer gatewayCancel()
+
+	mux := runtime.NewServeMux()
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+	grpcAddress := "localhost:" + strconv.Itoa(cfg.GRPC.Port)
+	if err := gw.RegisterAuthHandlerFromEndpoint(gatewayCtx, mux, grpcAddress, opts); err != nil {
+		log.Error("Failed to register auth handler", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	// HTTP сервер с поддержкой CORS
+	handler := c.Handler(mux)
+
+	gatewayServer := &http.Server{
+		Addr:    ":" + strconv.Itoa(cfg.HTTP.Port),
+		Handler: handler,
+	}
+
+	go func() {
+		log.Info("Starting HTTP gateway", slog.String("port", strconv.Itoa(cfg.HTTP.Port)))
+		errChan <- gatewayServer.ListenAndServe()
+	}()
+
 	// Graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 
-	// висим на этой строчке, блокирующая операция
-	signl := <-stop
-	log.Info("Shutting down auth service", slog.String("signal", signl.String()))
+	select {
+	case signl := <-stop:
+		log.Info("Shutting down auth service", slog.String("signal", signl.String()))
+	case err := <-errChan:
+		log.Error("Fatal error occurred", slog.String("error", err.Error()))
+	}
+
+	// Shutdown procedures
+	gatewayCancel()
+	if err := gatewayServer.Shutdown(context.Background()); err != nil {
+		log.Error("Failed to shutdown HTTP gateway", slog.String("error", err.Error()))
+	}
+
 	application.GRPCServer.Stop()
 	log.Info("Application stopped")
-
 }
 
 func setupLogger(env string) *slog.Logger {
