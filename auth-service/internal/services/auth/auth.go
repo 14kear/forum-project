@@ -239,3 +239,57 @@ func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID 
 
 	return newTokens.AccessToken, newTokens.RefreshToken, nil
 }
+
+func (auth *Auth) Logout(ctx context.Context, refreshToken string, appID int) error {
+	const op = "auth.Logout"
+
+	log := auth.log.With(slog.String("op", op))
+	log.Info("logout")
+
+	app, err := auth.appProvider.App(ctx, appID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	token, err := jwtGo.ParseWithClaims(refreshToken, jwtGo.MapClaims{}, func(token *jwtGo.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwtGo.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(app.Secret), nil
+	})
+	if err != nil {
+		return fmt.Errorf("%s: invalid token: %w", op, err)
+	}
+
+	claims, ok := token.Claims.(jwtGo.MapClaims)
+	if !ok || !token.Valid {
+		return fmt.Errorf("%s: invalid token claims", op)
+	}
+
+	if claims["typ"] != "refresh" {
+		return fmt.Errorf("%s: invalid token type: expected refresh, got %v", op, claims["typ"])
+	}
+
+	email, ok := claims["email"].(string)
+	if !ok {
+		return fmt.Errorf("%s: email claim missing or invalid", op)
+	}
+
+	user, err := auth.userProvider.User(ctx, email)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			auth.log.Warn("user not found", sl.Err(err))
+			return fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+
+		auth.log.Warn("failed to get user", sl.Err(err))
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err := auth.tokenStorage.RevokeRefreshToken(ctx, user.ID, appID, refreshToken); err != nil {
+		auth.log.Warn("failed to revoke old refresh token", sl.Err(err))
+	}
+
+	log.Info("successfully logged out user")
+	return nil
+}

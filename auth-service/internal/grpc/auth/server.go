@@ -28,6 +28,7 @@ type Auth interface {
 		refreshToken string,
 		appID int,
 	) (newAccessToken string, newRefreshToken string, err error)
+	Logout(ctx context.Context, refreshToken string, appID int) (err error)
 }
 
 type serverAPI struct {
@@ -98,6 +99,15 @@ func (s *serverAPI) RefreshTokens(ctx context.Context, req *ssov1.RefreshTokenRe
 	}
 
 	return &ssov1.RefreshTokenResponse{AccessToken: accessToken, RefreshToken: refreshToken}, nil
+}
+
+func (s *serverAPI) Logout(ctx context.Context, req *ssov1.LogoutRequest) (*ssov1.LogoutResponse, error) {
+	err := s.auth.Logout(ctx, req.GetRefreshToken(), int(req.GetAppId()))
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "user logged out")
+	}
+
+	return &ssov1.LogoutResponse{}, nil
 }
 
 func validateLogin(req *ssov1.LoginRequest) error {

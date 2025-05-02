@@ -552,13 +552,13 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\x05R\x05appId\"*\n" +
 	"\x0eLogoutResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2\xa6\x02\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2\xa8\x02\n" +
 	"\x04Auth\x129\n" +
 	"\bRegister\x12\x15.auth.RegisterRequest\x1a\x16.auth.RegisterResponse\x120\n" +
 	"\x05Login\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponse\x126\n" +
 	"\aIsAdmin\x12\x14.auth.IsAdminRequest\x1a\x15.auth.IsAdminResponse\x12F\n" +
-	"\rRefreshTokens\x12\x19.auth.RefreshTokenRequest\x1a\x1a.auth.RefreshTokenResponse\x121\n" +
-	"\x06Logout\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponseB\x15Z\x1314kear.sso.v1;ssov1b\x06proto3"
+	"\rRefreshTokens\x12\x19.auth.RefreshTokenRequest\x1a\x1a.auth.RefreshTokenResponse\x123\n" +
+	"\x06Logout\x12\x13.auth.LogoutRequest\x1a\x14.auth.LogoutResponseB\x15Z\x1314kear.sso.v1;ssov1b\x06proto3"
 
 var (
 	file_auth_auth_proto_rawDescOnce sync.Once
@@ -590,12 +590,12 @@ var file_auth_auth_proto_depIdxs = []int32{
 	2, // 1: auth.Auth.Login:input_type -> auth.LoginRequest
 	4, // 2: auth.Auth.IsAdmin:input_type -> auth.IsAdminRequest
 	6, // 3: auth.Auth.RefreshTokens:input_type -> auth.RefreshTokenRequest
-	2, // 4: auth.Auth.Logout:input_type -> auth.LoginRequest
+	8, // 4: auth.Auth.Logout:input_type -> auth.LogoutRequest
 	1, // 5: auth.Auth.Register:output_type -> auth.RegisterResponse
 	3, // 6: auth.Auth.Login:output_type -> auth.LoginResponse
 	5, // 7: auth.Auth.IsAdmin:output_type -> auth.IsAdminResponse
 	7, // 8: auth.Auth.RefreshTokens:output_type -> auth.RefreshTokenResponse
-	3, // 9: auth.Auth.Logout:output_type -> auth.LoginResponse
+	9, // 9: auth.Auth.Logout:output_type -> auth.LogoutResponse
 	5, // [5:10] is the sub-list for method output_type
 	0, // [0:5] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

@@ -15,7 +15,7 @@ service Auth {
 
   rpc RefreshTokens(RefreshTokenRequest) returns (RefreshTokenResponse);
 
-  rpc Logout(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
 // Объект, который отправляется при вызове RPC-метода (ручки) Register.
