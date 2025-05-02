@@ -9,6 +9,7 @@ import (
 	"github.com/14kear/forum-project/auth-service/internal/storage"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
+	"time"
 )
 
 type Storage struct {
@@ -117,4 +118,99 @@ func (s *Storage) App(ctx context.Context, appID int) (models.App, error) {
 		return models.App{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return app, nil
+}
+
+func (s *Storage) SaveToken(ctx context.Context, userID int64, appID int, token string, expiresAt time.Time) (int64, error) {
+	const op = "storage.postgres.SaveToken"
+
+	stmt, err := s.db.Prepare("INSERT INTO refresh_tokens(user_id, app_id, token, expires_at) VALUES($1, $2, $3, $4) RETURNING id")
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	var id int64
+	err = stmt.QueryRowContext(ctx, userID, appID, token, expiresAt).Scan(&id)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" { // Код ошибки для уникальности
+			return 0, fmt.Errorf("%s: token already exists for user %d and app %d: %w", op, userID, appID, storage.ErrTokenAlreadyExists)
+		}
+		return 0, fmt.Errorf("%s: failed to save refresh token: %w", op, err)
+	}
+
+	return id, nil
+}
+
+func (s *Storage) RevokeRefreshToken(ctx context.Context, userID int64, appID int, token string) error {
+	const op = "storage.postgres.RevokeRefreshToken"
+
+	stmt, err := s.db.Prepare("UPDATE refresh_tokens SET revoked = TRUE WHERE token = $1 AND user_id = $2 AND app_id = $3 RETURNING id")
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	affectedRows, err := stmt.ExecContext(ctx, token, userID, appID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rowsAffected, err := affectedRows.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("%s: no refresh token found for the given user and app", op)
+	}
+
+	return nil
+}
+
+func (s *Storage) IsRefreshTokenValid(ctx context.Context, userID int64, appID int, token string) (bool, error) {
+	const op = "storage.postgres.IsRefreshTokenValid"
+
+	stmt, err := s.db.Prepare(`
+		SELECT EXISTS(
+			SELECT 1 
+			FROM refresh_tokens 
+			WHERE token = $1 
+			AND revoked = FALSE 
+			AND expires_at > NOW() 
+			AND user_id = $2 
+			AND app_id = $3
+		)`)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	var isValid bool
+	err = stmt.QueryRowContext(ctx, token, userID, appID).Scan(&isValid)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return isValid, nil
+}
+
+func (s *Storage) DeleteExpiredTokens(ctx context.Context, appID int) error {
+	const op = "storage.postgres.DeleteExpiredTokens"
+
+	stmt, err := s.db.Prepare(`
+		DELETE FROM refresh_tokens 
+		WHERE expires_at < NOW() 
+		AND revoked = FALSE 
+		AND app_id = $1 RETURNING id`)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, appID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
 }

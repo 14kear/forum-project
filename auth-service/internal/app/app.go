@@ -18,7 +18,7 @@ func NewApp(log *slog.Logger, grpcPort int, storagePath string, accessToken time
 		panic(err)
 	}
 
-	authService := auth.NewAuth(log, storage, storage, storage, accessToken, refreshToken)
+	authService := auth.NewAuth(log, storage, storage, storage, storage, accessToken, refreshToken)
 
 	grpcApp := grpcapp.NewApp(log, authService, grpcPort)
 

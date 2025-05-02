@@ -19,8 +19,16 @@ type Auth struct {
 	userSaver    UserSaver
 	userProvider UserProvider
 	appProvider  AppProvider
+	tokenStorage TokenStorage
 	accessToken  time.Duration
 	refreshToken time.Duration
+}
+
+type TokenStorage interface {
+	SaveToken(ctx context.Context, userID int64, appID int, token string, expiresAt time.Time) (int64, error)
+	RevokeRefreshToken(ctx context.Context, userID int64, appID int, token string) error
+	IsRefreshTokenValid(ctx context.Context, userID int64, appID int, token string) (bool, error)
+	DeleteExpiredTokens(ctx context.Context, appID int) error
 }
 
 type UserSaver interface {
@@ -49,6 +57,7 @@ func NewAuth(
 	userSaver UserSaver,
 	userProvider UserProvider,
 	appProvider AppProvider,
+	tokenStorage TokenStorage,
 	accessToken time.Duration,
 	refreshToken time.Duration,
 ) *Auth {
@@ -57,6 +66,7 @@ func NewAuth(
 		userSaver:    userSaver,
 		userProvider: userProvider,
 		appProvider:  appProvider,
+		tokenStorage: tokenStorage,
 		accessToken:  accessToken,
 		refreshToken: refreshToken,
 	}
@@ -99,6 +109,12 @@ func (auth *Auth) Login(ctx context.Context, email, password string, appID int) 
 	if err != nil {
 		auth.log.Error("failed to generate token pair", sl.Err(err))
 		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	refreshTokenSave, errTokenSave := auth.tokenStorage.SaveToken(ctx, user.ID, appID, tokenPair.RefreshToken, time.Now().Add(auth.refreshToken))
+	if errTokenSave != nil {
+		auth.log.Error("failed to save refresh token", sl.Err(errTokenSave))
+		return "", "", fmt.Errorf("%s: failed to store refresh token with id %d : %w", op, refreshTokenSave, errTokenSave)
 	}
 
 	return tokenPair.AccessToken, tokenPair.RefreshToken, nil
@@ -159,34 +175,54 @@ func (auth *Auth) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID int) (string, string, error) {
 	const op = "auth.RefreshToken"
 
+	log := auth.log.With(slog.String("op", op))
+	log.Info("refreshing token")
+
 	app, err := auth.appProvider.App(ctx, appID)
 	if err != nil {
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	token, err := jwtGo.ParseWithClaims(refreshToken, jwtGo.MapClaims{}, func(token *jwtGo.Token) (interface{}, error) {
-		// Проверка метода подписи
 		if _, ok := token.Method.(*jwtGo.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(app.Secret), nil
 	})
 	if err != nil {
-		return "", "", fmt.Errorf("invalid token: %w", err)
+		return "", "", fmt.Errorf("%s: invalid token: %w", op, err)
 	}
 
 	claims, ok := token.Claims.(jwtGo.MapClaims)
 	if !ok || !token.Valid {
-		return "", "", fmt.Errorf("invalid token claims")
+		return "", "", fmt.Errorf("%s: invalid token claims", op)
 	}
 
 	if claims["typ"] != "refresh" {
-		return "", "", fmt.Errorf("invalid token type: expected refresh, got %v", claims["typ"])
+		return "", "", fmt.Errorf("%s: invalid token type: expected refresh, got %v", op, claims["typ"])
 	}
 
-	user, err := auth.userProvider.User(ctx, claims["email"].(string))
+	email, ok := claims["email"].(string)
+	if !ok {
+		return "", "", fmt.Errorf("%s: email claim missing or invalid", op)
+	}
+
+	user, err := auth.userProvider.User(ctx, email)
 	if err != nil {
 		return "", "", fmt.Errorf("%s: failed to get user: %w", op, err)
+	}
+
+	valid, err := auth.tokenStorage.IsRefreshTokenValid(ctx, user.ID, appID, refreshToken)
+	if err != nil {
+		return "", "", fmt.Errorf("%s: failed to validate refresh token: %w", op, err)
+	}
+	if !valid {
+		return "", "", fmt.Errorf("%s: refresh token is not valid", op)
+	}
+
+	if err := auth.tokenStorage.RevokeRefreshToken(ctx, user.ID, appID, refreshToken); err != nil {
+		auth.log.Warn("failed to revoke old refresh token", sl.Err(err))
+		// не фейлим, но логируем
 	}
 
 	newTokens, err := jwt.NewTokenPair(user, app, auth.accessToken, auth.refreshToken)
@@ -194,6 +230,12 @@ func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID 
 		return "", "", fmt.Errorf("%s: failed to generate token pair: %w", op, err)
 	}
 
-	return newTokens.AccessToken, newTokens.RefreshToken, nil
+	if _, err := auth.tokenStorage.SaveToken(ctx, user.ID, appID, newTokens.RefreshToken, time.Now().Add(auth.refreshToken)); err != nil {
+		log.Error("failed to save new refresh token", sl.Err(err))
+		return "", "", fmt.Errorf("%s: failed to store new refresh token: %w", op, err)
+	}
 
+	log.Info("successfully refreshed tokens")
+
+	return newTokens.AccessToken, newTokens.RefreshToken, nil
 }
