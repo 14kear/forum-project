@@ -27,7 +27,7 @@ func main() {
 
 	go application.GRPCServer.MustRun()
 
-	// получаем сигнал от системы и сама занимается завершением себя
+	// получаем сигнал от системы, сама занимается завершением себя
 	// Graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)

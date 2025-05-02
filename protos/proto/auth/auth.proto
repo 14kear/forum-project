@@ -1,5 +1,8 @@
 syntax = "proto3";
 
+import "google/api/annotations.proto";
+import "google/api/http.proto";
+
 package auth;
 
 option go_package = "14kear.sso.v1;ssov1";
@@ -7,15 +10,39 @@ option go_package = "14kear.sso.v1;ssov1";
 // Auth is service for managing permissions and roles.
 service Auth {
   // Register registers a new user.
-  rpc Register (RegisterRequest) returns (RegisterResponse);
+  rpc Register (RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/auth/register"
+      body: "*"
+    };
+  }
   // Login logs in a user and returns an auth token.
-  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc Login (LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/auth/login"
+      body: "*"
+    };
+  }
 
-  rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
+  rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse) {
+    option (google.api.http) = {
+      get: "/auth/admin/{user_id}"
+    };
+  }
 
-  rpc RefreshTokens(RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc RefreshTokens(RefreshTokenRequest) returns (RefreshTokenResponse) {
+    option (google.api.http) = {
+      post: "/auth/refresh"
+      body: "*"
+    };
+  }
 
-  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {
+    option (google.api.http) = {
+      post: "/auth/logout"
+      body: "*"
+    };
+  }
 }
 
 // Объект, который отправляется при вызове RPC-метода (ручки) Register.
