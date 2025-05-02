@@ -14,6 +14,8 @@ service Auth {
   rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
 
   rpc RefreshTokens(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  rpc Logout(LoginRequest) returns (LoginResponse);
 }
 
 // Объект, который отправляется при вызове RPC-метода (ручки) Register.
@@ -53,8 +55,16 @@ message RefreshTokenRequest {
   int32 app_id = 2;
 }
 
-// Ответ с новым access и refresh токеном
 message RefreshTokenResponse {
   string access_token = 1;
   string refresh_token = 2;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+  int32 app_id = 2;
+}
+
+message LogoutResponse {
+  string message = 1;
 }
