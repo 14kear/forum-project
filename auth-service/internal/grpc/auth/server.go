@@ -29,6 +29,7 @@ type Auth interface {
 		appID int,
 	) (newAccessToken string, newRefreshToken string, err error)
 	Logout(ctx context.Context, refreshToken string, appID int) (err error)
+	GetAppSecret(ctx context.Context, appID int) (string, error)
 }
 
 type serverAPI struct {

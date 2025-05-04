@@ -293,3 +293,15 @@ func (auth *Auth) Logout(ctx context.Context, refreshToken string, appID int) er
 	log.Info("successfully logged out user")
 	return nil
 }
+
+// GetAppSecret возвращает секрет приложения по appID (для проверки токенов)
+func (auth *Auth) GetAppSecret(ctx context.Context, appID int) (string, error) {
+	const op = "auth.GetAppSecret"
+
+	app, err := auth.appProvider.App(ctx, appID)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	return app.Secret, nil
+}

@@ -207,9 +207,18 @@ func (s *Storage) DeleteExpiredTokens(ctx context.Context, appID int) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.ExecContext(ctx, appID)
+	res, err := stmt.ExecContext(ctx, appID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("%s: %w", op, storage.ErrTokenNotFound)
 	}
 
 	return nil

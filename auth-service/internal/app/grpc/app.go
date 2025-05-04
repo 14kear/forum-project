@@ -15,6 +15,7 @@ type App struct {
 }
 
 func NewApp(log *slog.Logger, authService authgrpc.Auth, port int) *App {
+	//gRPCServer := grpc.NewServer(grpc.ChainUnaryInterceptor(authInterceptor(authService)))
 	gRPCServer := grpc.NewServer()
 
 	authgrpc.Register(gRPCServer, authService)
@@ -57,3 +58,80 @@ func (a *App) Stop() {
 	a.log.With(slog.String("op", op)).Info("gRPC server is stopping")
 	a.gRPCServer.GracefulStop() // блокирует выполнение кода пока не обработаются текущие соединения
 }
+
+//// interceptors (middleware) для проверки access tokens
+//func (a *App) authInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+//	// Пропускаем методы, которые не требуют аутентификации
+//	if info.FullMethod == "/auth.Auth/Login" ||
+//		info.FullMethod == "/auth.Auth/Register" ||
+//		info.FullMethod == "/auth.Auth/RefreshToken" {
+//		return handler(ctx, req)
+//	}
+//
+//	md, ok := metadata.FromIncomingContext(ctx)
+//	if !ok {
+//		return nil, status.Error(codes.Unauthenticated, "metadata not provided")
+//	}
+//
+//	appID, err := getAppIDFromMetadata(md)
+//	if err != nil {
+//		return nil, status.Errorf(codes.Unauthenticated, "appID: %v", err)
+//	}
+//
+//	secret, err := a.authSvc.GetAppSecret(ctx, appID)
+//	if err != nil {
+//		return nil, status.Errorf(codes.Unauthenticated, "invalid app: %v", err)
+//	}
+//
+//	accessToken, err := getTokenFromMetadata(md, "refresh_token")
+//	if err != nil {
+//		return nil, status.Errorf(codes.Unauthenticated, "refresh token: %v", err)
+//	}
+//}
+//
+//func getAppIDFromMetadata(md metadata.MD) (int, error) {
+//	appIDs := md.Get("x-app-id")
+//	if len(appIDs) == 0 {
+//		return 0, fmt.Errorf("app id not provided")
+//	}
+//
+//	appID, err := strconv.Atoi(appIDs[0])
+//	if err != nil {
+//		return 0, fmt.Errorf("invalid app id")
+//	}
+//
+//	return appID, nil
+//}
+//
+//func getTokenFromMetadata(md metadata.MD, header string) (string, error) {
+//	headers := md.Get(header)
+//	if len(headers) == 0 {
+//		return "", fmt.Errorf("header %s not provided", header)
+//	}
+//
+//	token := strings.TrimPrefix(headers[0], "Bearer ")
+//	if token == "" {
+//		return "", fmt.Errorf("empty token")
+//	}
+//
+//	return token, nil
+//}
+
+//func AccessLogInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
+//	return func(
+//		ctx context.Context,
+//		req interface{},
+//		info *grpc.UnaryServerInfo,
+//		handler grpc.UnaryHandler,
+//	) (interface{}, error) {
+//		md, ok := metadata.FromIncomingContext(ctx)
+//		if ok {
+//			if authHeaders := md.Get("authorization"); len(authHeaders) > 0 {
+//				log.Info("Authorization header", slog.String("value", authHeaders[0]))
+//			} else {
+//				log.Info("Authorization header not found")
+//			}
+//		}
+//		return handler(ctx, req)
+//	}
+//}
