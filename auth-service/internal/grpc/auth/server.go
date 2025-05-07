@@ -30,6 +30,7 @@ type Auth interface {
 	) (newAccessToken string, newRefreshToken string, err error)
 	Logout(ctx context.Context, refreshToken string, appID int) (err error)
 	GetAppSecret(ctx context.Context, appID int) (string, error)
+	ValidateToken(ctx context.Context, accessToken string, appID int) (int64, error)
 }
 
 type serverAPI struct {
@@ -109,6 +110,15 @@ func (s *serverAPI) Logout(ctx context.Context, req *ssov1.LogoutRequest) (*ssov
 	}
 
 	return &ssov1.LogoutResponse{}, nil
+}
+
+func (s *serverAPI) ValidateToken(ctx context.Context, req *ssov1.ValidateTokenRequest) (*ssov1.ValidateTokenResponse, error) {
+	userID, err := s.auth.ValidateToken(ctx, req.GetAccessToken(), int(req.GetAppId()))
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid access token")
+	}
+
+	return &ssov1.ValidateTokenResponse{UserId: userID}, nil
 }
 
 func validateLogin(req *ssov1.LoginRequest) error {

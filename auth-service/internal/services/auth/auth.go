@@ -10,25 +10,35 @@ import (
 	"github.com/14kear/forum-project/auth-service/internal/storage"
 	jwtGo "github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log/slog"
 	"time"
 )
 
 type Auth struct {
-	log          *slog.Logger
-	userSaver    UserSaver
-	userProvider UserProvider
-	appProvider  AppProvider
-	tokenStorage TokenStorage
-	accessToken  time.Duration
-	refreshToken time.Duration
+	log             *slog.Logger
+	userSaver       UserSaver
+	userProvider    UserProvider
+	appProvider     AppProvider
+	tokenStorage    TokenStorage
+	accessTokenTTL  time.Duration
+	refreshTokenTTL time.Duration
 }
+
+type TokenOperation struct {
+	userID int64
+	appID  int
+	token  string
+}
+
+// TODO: структура для updateToken(userid, appid, token)
 
 type TokenStorage interface {
 	SaveToken(ctx context.Context, userID int64, appID int, token string, expiresAt time.Time) (int64, error)
 	RevokeRefreshToken(ctx context.Context, userID int64, appID int, token string) error
 	IsRefreshTokenValid(ctx context.Context, userID int64, appID int, token string) (bool, error)
-	DeleteExpiredTokens(ctx context.Context, appID int) error
+	DeleteRefreshToken(ctx context.Context, userID int64, appID int, token string) error
 }
 
 type UserSaver interface {
@@ -58,17 +68,17 @@ func NewAuth(
 	userProvider UserProvider,
 	appProvider AppProvider,
 	tokenStorage TokenStorage,
-	accessToken time.Duration,
-	refreshToken time.Duration,
+	accessTokenTTL time.Duration,
+	refreshTokenTTL time.Duration,
 ) *Auth {
 	return &Auth{
-		log:          log,
-		userSaver:    userSaver,
-		userProvider: userProvider,
-		appProvider:  appProvider,
-		tokenStorage: tokenStorage,
-		accessToken:  accessToken,
-		refreshToken: refreshToken,
+		log:             log,
+		userSaver:       userSaver,
+		userProvider:    userProvider,
+		appProvider:     appProvider,
+		tokenStorage:    tokenStorage,
+		accessTokenTTL:  accessTokenTTL,
+		refreshTokenTTL: refreshTokenTTL,
 	}
 }
 
@@ -105,13 +115,13 @@ func (auth *Auth) Login(ctx context.Context, email, password string, appID int) 
 	}
 	log.Info("successfully logged in")
 
-	tokenPair, err := jwt.NewTokenPair(user, app, auth.accessToken, auth.refreshToken)
+	tokenPair, err := jwt.NewTokenPair(user, app, auth.accessTokenTTL, auth.refreshTokenTTL)
 	if err != nil {
 		auth.log.Error("failed to generate token pair", sl.Err(err))
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	refreshTokenSave, errTokenSave := auth.tokenStorage.SaveToken(ctx, user.ID, appID, tokenPair.RefreshToken, time.Now().Add(auth.refreshToken))
+	refreshTokenSave, errTokenSave := auth.tokenStorage.SaveToken(ctx, user.ID, appID, tokenPair.RefreshToken, time.Now().Add(auth.refreshTokenTTL))
 	if errTokenSave != nil {
 		auth.log.Error("failed to save refresh token", sl.Err(errTokenSave))
 		return "", "", fmt.Errorf("%s: failed to store refresh token with id %d : %w", op, refreshTokenSave, errTokenSave)
@@ -173,7 +183,7 @@ func (auth *Auth) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 }
 
 func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID int) (string, string, error) {
-	const op = "auth.RefreshToken"
+	const op = "auth.RefreshTokenTTL"
 
 	log := auth.log.With(slog.String("op", op))
 	log.Info("refreshing token")
@@ -202,6 +212,14 @@ func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID 
 		return "", "", fmt.Errorf("%s: invalid token type: expected refresh, got %v", op, claims["typ"])
 	}
 
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		return "", "", fmt.Errorf("%s: exp claim is missing or invalid", op)
+	}
+	if time.Unix(int64(exp), 0).Before(time.Now()) {
+		return "", "", fmt.Errorf("%s: refresh token is expired", op)
+	}
+
 	email, ok := claims["email"].(string)
 	if !ok {
 		return "", "", fmt.Errorf("%s: email claim missing or invalid", op)
@@ -220,17 +238,16 @@ func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID 
 		return "", "", fmt.Errorf("%s: refresh token is not valid", op)
 	}
 
-	if err := auth.tokenStorage.RevokeRefreshToken(ctx, user.ID, appID, refreshToken); err != nil {
-		auth.log.Warn("failed to revoke old refresh token", sl.Err(err))
-		// не фейлим, но логируем
+	if err := auth.tokenStorage.DeleteRefreshToken(ctx, user.ID, appID, refreshToken); err != nil {
+		auth.log.Warn("failed to delete refresh token", sl.Err(err))
 	}
 
-	newTokens, err := jwt.NewTokenPair(user, app, auth.accessToken, auth.refreshToken)
+	newTokens, err := jwt.NewTokenPair(user, app, auth.accessTokenTTL, auth.refreshTokenTTL)
 	if err != nil {
 		return "", "", fmt.Errorf("%s: failed to generate token pair: %w", op, err)
 	}
 
-	if _, err := auth.tokenStorage.SaveToken(ctx, user.ID, appID, newTokens.RefreshToken, time.Now().Add(auth.refreshToken)); err != nil {
+	if _, err := auth.tokenStorage.SaveToken(ctx, user.ID, appID, newTokens.RefreshToken, time.Now().Add(auth.refreshTokenTTL)); err != nil {
 		log.Error("failed to save new refresh token", sl.Err(err))
 		return "", "", fmt.Errorf("%s: failed to store new refresh token: %w", op, err)
 	}
@@ -286,8 +303,16 @@ func (auth *Auth) Logout(ctx context.Context, refreshToken string, appID int) er
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err := auth.tokenStorage.RevokeRefreshToken(ctx, user.ID, appID, refreshToken); err != nil {
-		auth.log.Warn("failed to revoke old refresh token", sl.Err(err))
+	valid, err := auth.tokenStorage.IsRefreshTokenValid(ctx, user.ID, appID, refreshToken)
+	if err != nil {
+		return fmt.Errorf("%s: failed to validate refresh token: %w", op, err)
+	}
+	if !valid {
+		return fmt.Errorf("%s: refresh token is not valid", op)
+	}
+
+	if err := auth.tokenStorage.DeleteRefreshToken(ctx, user.ID, appID, refreshToken); err != nil {
+		auth.log.Warn("failed to delete refresh token", sl.Err(err))
 	}
 
 	log.Info("successfully logged out user")
@@ -304,4 +329,52 @@ func (auth *Auth) GetAppSecret(ctx context.Context, appID int) (string, error) {
 	}
 
 	return app.Secret, nil
+}
+
+// ValidateToken валидирует access token! Валидация refresh token требует обращения к бд, поэтому реализована напрямую в RefreshTokens
+func (auth *Auth) ValidateToken(ctx context.Context, accessToken string, appID int) (int64, error) {
+	const op = "auth.ValidateToken"
+	log := auth.log.With(slog.String("op", op))
+	log.Info("validating token")
+
+	app, err := auth.appProvider.App(ctx, appID)
+	if err != nil {
+		return 0, status.Errorf(codes.Internal, "%s: %v", op, err)
+	}
+
+	token, err := jwtGo.ParseWithClaims(accessToken, jwtGo.MapClaims{}, func(token *jwtGo.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwtGo.SigningMethodHMAC); !ok {
+			return nil, status.Errorf(codes.Unauthenticated, "%s: unexpected signing method: %v", op, token.Header["alg"])
+		}
+		return []byte(app.Secret), nil
+	})
+	if err != nil {
+		return 0, status.Errorf(codes.Unauthenticated, "%s: invalid token: %v", op, err)
+	}
+
+	claims, ok := token.Claims.(jwtGo.MapClaims)
+	if !ok || !token.Valid {
+		return 0, status.Error(codes.Unauthenticated, op+": invalid token claims")
+	}
+
+	if typ, ok := claims["typ"].(string); !ok || typ != "access" {
+		return 0, status.Errorf(codes.Unauthenticated, "%s: invalid token type: expected access, got %v", op, claims["typ"])
+	}
+
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		return 0, status.Errorf(codes.Unauthenticated, "%s: exp claim is missing or invalid", op)
+	}
+	if time.Unix(int64(exp), 0).Before(time.Now()) {
+		return 0, status.Error(codes.Unauthenticated, op+": token is expired")
+	}
+
+	uidFloat, ok := claims["uid"].(float64)
+	if !ok {
+		return 0, status.Errorf(codes.Unauthenticated, "%s: userID (uid) not found or invalid in token", op)
+	}
+	uid := int64(uidFloat)
+
+	log.Info("token validated successfully")
+	return uid, nil
 }

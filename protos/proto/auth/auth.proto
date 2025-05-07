@@ -100,8 +100,10 @@ message LogoutResponse {
 
 message ValidateTokenRequest {
   string access_token = 1;
+  int32 app_id = 2;
 }
+
 message ValidateTokenResponse {
-  string user_id = 1;
+  int64 user_id = 1;
   bool is_valid = 2;
 }

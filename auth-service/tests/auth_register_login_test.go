@@ -60,7 +60,7 @@ func TestRegisterLogin_Login_HappyPath(t *testing.T) {
 
 	const deltaSeconds = 1 // точность до 1 секунды для проверки времени жизни токена
 
-	assert.InDelta(t, loginTime.Add(st.Cfg.AccessToken).Unix(), accessClaims["exp"].(float64), deltaSeconds)
+	assert.InDelta(t, loginTime.Add(st.Cfg.AccessTokenTTL).Unix(), accessClaims["exp"].(float64), deltaSeconds)
 
 	// проверка refresh token`a
 	refreshTokenParsed, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
@@ -75,7 +75,7 @@ func TestRegisterLogin_Login_HappyPath(t *testing.T) {
 	assert.Equal(t, email, refreshClaims["email"].(string))
 	assert.Equal(t, "refresh", refreshClaims["typ"])
 
-	assert.InDelta(t, loginTime.Add(st.Cfg.RefreshToken).Unix(), refreshClaims["exp"].(float64), deltaSeconds)
+	assert.InDelta(t, loginTime.Add(st.Cfg.RefreshTokenTTL).Unix(), refreshClaims["exp"].(float64), deltaSeconds)
 }
 
 func randomFakePassword() string {

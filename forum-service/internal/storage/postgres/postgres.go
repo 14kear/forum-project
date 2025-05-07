@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/14kear/forum-project/forum-service/internal/models"
 	"github.com/14kear/forum-project/forum-service/internal/storage"
+	_ "github.com/lib/pq"
 )
 
 type Storage struct {
@@ -46,7 +47,7 @@ func (s *Storage) SaveTopic(ctx context.Context, title, content string, userID i
 	return id, nil
 }
 
-func (s *Storage) Topic(ctx context.Context, id int) (models.Topic, error) {
+func (s *Storage) TopicByID(ctx context.Context, id int) (models.Topic, error) {
 	const op = "storage.postgres.Topic"
 
 	stmt, err := s.db.Prepare("SELECT id, title, content, user_id, created_at FROM topics WHERE id = $1")
@@ -65,6 +66,35 @@ func (s *Storage) Topic(ctx context.Context, id int) (models.Topic, error) {
 	}
 
 	return topic, nil
+}
+
+func (s *Storage) Topics(ctx context.Context) ([]models.Topic, error) {
+	const op = "storage.postgres.GetAllTopics"
+
+	rows, err := s.db.QueryContext(ctx, `
+        SELECT id, title, content, user_id, created_at
+        FROM topics
+        ORDER BY created_at DESC
+    `)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query: %w", op, err)
+	}
+	defer rows.Close()
+
+	var topics []models.Topic
+	for rows.Next() {
+		var topic models.Topic
+		if err := rows.Scan(&topic.ID, &topic.Title, &topic.Content, &topic.UserID, &topic.CreatedAt); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		topics = append(topics, topic)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows error: %w", op, err)
+	}
+
+	return topics, nil
 }
 
 func (s *Storage) DeleteTopic(ctx context.Context, id int) error {
@@ -110,7 +140,7 @@ func (s *Storage) SaveComment(ctx context.Context, topicID int, userID int64, co
 	return id, nil
 }
 
-func (s *Storage) Comment(ctx context.Context, id, topicID int, userID int64) (models.Comment, error) {
+func (s *Storage) CommentByID(ctx context.Context, id, topicID int, userID int64) (models.Comment, error) {
 	const op = "storage.postgres.Comment"
 
 	stmt, err := s.db.Prepare("SELECT id, topic_id, user_id, content, created_at FROM comments WHERE topic_id = $1 AND id = $2 AND user_id = $3")
@@ -137,16 +167,46 @@ func (s *Storage) Comment(ctx context.Context, id, topicID int, userID int64) (m
 	return comment, nil
 }
 
-func (s *Storage) DeleteComment(ctx context.Context, id int) error {
+func (s *Storage) CommentsByTopicID(ctx context.Context, topicID int) ([]models.Comment, error) {
+	const op = "storage.postgres.CommentsByTopicID"
+
+	rows, err := s.db.QueryContext(ctx, `
+        SELECT id, topic_id, user_id, content, created_at
+        FROM comments 
+        WHERE topic_id = $1
+        ORDER BY created_at DESC
+    `, topicID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query: %w", op, err)
+	}
+	defer rows.Close()
+
+	var comments []models.Comment
+	for rows.Next() {
+		var comment models.Comment
+		if err := rows.Scan(
+			&comment.ID,
+			&comment.TopicID,
+			&comment.UserID,
+			&comment.Content,
+			&comment.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		comments = append(comments, comment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows error: %w", op, err)
+	}
+
+	return comments, nil
+}
+
+func (s *Storage) DeleteComment(ctx context.Context, id int, topicID int) error {
 	const op = "storage.postgres.DeleteComment"
 
-	stmt, err := s.db.Prepare("DELETE FROM comments WHERE id = $1")
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	defer stmt.Close()
-
-	res, err := stmt.ExecContext(ctx, id)
+	res, err := s.db.ExecContext(ctx, "DELETE FROM comments WHERE id = $1 AND topic_id = $2", id, topicID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -180,7 +240,7 @@ func (s *Storage) SaveChatMessage(ctx context.Context, userID int64, content str
 	return id, nil
 }
 
-func (s *Storage) ChatMessage(ctx context.Context, id int, userID int64) (models.ChatMessage, error) {
+func (s *Storage) ChatMessageByID(ctx context.Context, id int, userID int64) (models.ChatMessage, error) {
 	const op = "storage.postgres.ChatMessage"
 
 	stmt, err := s.db.Prepare("SELECT id, user_id, content, created_at FROM chat_messages WHERE id = $1")
@@ -204,6 +264,35 @@ func (s *Storage) ChatMessage(ctx context.Context, id int, userID int64) (models
 	}
 
 	return msg, nil
+}
+
+func (s *Storage) ChatMessages(ctx context.Context) ([]models.ChatMessage, error) {
+	const op = "storage.postgres.ChatMessages"
+
+	rows, err := s.db.QueryContext(ctx, `
+        SELECT id, user_id, content, created_at
+        FROM chat_messages
+        ORDER BY created_at DESC
+    `)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query: %w", op, err)
+	}
+	defer rows.Close()
+
+	var messages []models.ChatMessage
+	for rows.Next() {
+		var msg models.ChatMessage
+		if err := rows.Scan(&msg.ID, &msg.UserID, &msg.Content, &msg.CreatedAt); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows error: %w", op, err)
+	}
+
+	return messages, nil
 }
 
 func (s *Storage) DeleteChatMessage(ctx context.Context, id int) error {

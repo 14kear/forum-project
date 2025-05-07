@@ -525,6 +525,7 @@ func (x *LogoutResponse) GetMessage() string {
 type ValidateTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	AppId         int32                  `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -566,9 +567,16 @@ func (x *ValidateTokenRequest) GetAccessToken() string {
 	return ""
 }
 
+func (x *ValidateTokenRequest) GetAppId() int32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
 type ValidateTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	IsValid       bool                   `protobuf:"varint,2,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -604,11 +612,11 @@ func (*ValidateTokenResponse) Descriptor() ([]byte, []int) {
 	return file_auth_auth_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *ValidateTokenResponse) GetUserId() string {
+func (x *ValidateTokenResponse) GetUserId() int64 {
 	if x != nil {
 		return x.UserId
 	}
-	return ""
+	return 0
 }
 
 func (x *ValidateTokenResponse) GetIsValid() bool {
@@ -649,11 +657,12 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\x05R\x05appId\"*\n" +
 	"\x0eLogoutResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"9\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"P\n" +
 	"\x14ValidateTokenRequest\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\"K\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\x05R\x05appId\"K\n" +
 	"\x15ValidateTokenResponse\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x19\n" +
+	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x19\n" +
 	"\bis_valid\x18\x02 \x01(\bR\aisValid2\xf7\x03\n" +
 	"\x04Auth\x12T\n" +
 	"\bRegister\x12\x15.auth.RegisterRequest\x1a\x16.auth.RegisterResponse\"\x19\x82\xd3\xe4\x93\x02\x13:\x01*\"\x0e/auth/register\x12H\n" +

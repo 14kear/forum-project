@@ -170,6 +170,7 @@ func (s *Storage) RevokeRefreshToken(ctx context.Context, userID int64, appID in
 func (s *Storage) IsRefreshTokenValid(ctx context.Context, userID int64, appID int, token string) (bool, error) {
 	const op = "storage.postgres.IsRefreshTokenValid"
 
+	// TODO: передать время вместо now()
 	stmt, err := s.db.Prepare(`
 		SELECT EXISTS(
 			SELECT 1 
@@ -180,6 +181,7 @@ func (s *Storage) IsRefreshTokenValid(ctx context.Context, userID int64, appID i
 			AND user_id = $2 
 			AND app_id = $3
 		)`)
+
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
@@ -194,20 +196,17 @@ func (s *Storage) IsRefreshTokenValid(ctx context.Context, userID int64, appID i
 	return isValid, nil
 }
 
-func (s *Storage) DeleteExpiredTokens(ctx context.Context, appID int) error {
+func (s *Storage) DeleteRefreshToken(ctx context.Context, userID int64, appID int, token string) error {
 	const op = "storage.postgres.DeleteExpiredTokens"
 
-	stmt, err := s.db.Prepare(`
-		DELETE FROM refresh_tokens 
-		WHERE expires_at < NOW() 
-		AND revoked = FALSE 
-		AND app_id = $1 RETURNING id`)
+	// TODO: передать время вместо now()
+	stmt, err := s.db.Prepare("DELETE FROM refresh_tokens WHERE token = $1 AND user_id = $2 AND app_id = $3")
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, appID)
+	res, err := stmt.ExecContext(ctx, token, userID, appID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

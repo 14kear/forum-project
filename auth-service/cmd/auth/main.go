@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"github.com/14kear/forum-project/auth-service/internal/app"
 	"github.com/14kear/forum-project/auth-service/internal/config"
 	"github.com/14kear/forum-project/auth-service/internal/lib/logger/handlers/slogpretty"
@@ -42,14 +43,14 @@ func main() {
 		log.Info("Starting auth service")
 	}
 
-	application := app.NewApp(log, cfg.GRPC.Port, cfg.StoragePath, cfg.AccessToken, cfg.RefreshToken)
+	application := app.NewApp(log, cfg.GRPC.Port, cfg.StoragePath, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 
-	// Channel to listen for errors from goroutines
-	errChan := make(chan error, 2)
-
-	// Start gRPC server
+	// TODO: сделать отказоусточивость при падении одного из сервиса
 	go func() {
-		errChan <- application.GRPCServer.Run()
+		err := application.GRPCServer.Run()
+		if err != nil {
+			log.Error("Failed to start auth service", slog.Any("error", err))
+		}
 	}()
 
 	// Start HTTP gateway
@@ -75,7 +76,12 @@ func main() {
 
 	go func() {
 		log.Info("Starting HTTP gateway", slog.String("port", strconv.Itoa(cfg.HTTP.Port)))
-		errChan <- gatewayServer.ListenAndServe()
+		err := gatewayServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("Failed to start gateway", slog.String("error", err.Error()))
+		} else if errors.Is(err, http.ErrServerClosed) {
+			log.Info("HTTP Gateway server shutdown", slog.String("port", strconv.Itoa(cfg.HTTP.Port)))
+		}
 	}()
 
 	// Graceful shutdown
@@ -85,8 +91,6 @@ func main() {
 	select {
 	case signl := <-stop:
 		log.Info("Shutting down auth service", slog.String("signal", signl.String()))
-	case err := <-errChan:
-		log.Error("Fatal error occurred", slog.String("error", err.Error()))
 	}
 
 	// Shutdown procedures

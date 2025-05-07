@@ -64,7 +64,7 @@ func (a *App) Stop() {
 //	// Пропускаем методы, которые не требуют аутентификации
 //	if info.FullMethod == "/auth.Auth/Login" ||
 //		info.FullMethod == "/auth.Auth/Register" ||
-//		info.FullMethod == "/auth.Auth/RefreshToken" {
+//		info.FullMethod == "/auth.Auth/RefreshTokenTTL" {
 //		return handler(ctx, req)
 //	}
 //
