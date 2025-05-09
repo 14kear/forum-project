@@ -5,7 +5,7 @@ import (
 	"fmt"
 	forumHandler "github.com/14kear/forum-project/forum-service/internal/handlers/forum"
 	forumRoutes "github.com/14kear/forum-project/forum-service/internal/routes"
-	"github.com/14kear/forum-project/forum-service/internal/services/forum"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"log/slog"
 	"net/http"
@@ -22,17 +22,29 @@ type App struct {
 func NewApp(
 	log *slog.Logger,
 	port int,
-	forumService *forum.Forum,
 	handler *forumHandler.ForumHandler,
 	authMiddleware gin.HandlerFunc,
 ) *App {
 	r := gin.Default()
 
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Refresh-Token"},
+		ExposeHeaders:    []string{"X-New-Access-Token", "X-New-Refresh-Token"},
+		AllowCredentials: true,
+	}))
+
 	// Группировка маршрутов: /api/forum/*
 	api := r.Group("/api")
 	{
-		forumGroup := api.Group("/forum", authMiddleware)
-		forumRoutes.RegisterForumRoutes(forumGroup, handler)
+		// Публичные маршруты
+		publicForumGroup := api.Group("/forum")
+		forumRoutes.RegisterPublicRoutes(publicForumGroup, handler)
+
+		// Приватные маршруты (с авторизацией)
+		privateForumGroup := api.Group("/forum", authMiddleware)
+		forumRoutes.RegisterPrivateRoutes(privateForumGroup, handler)
 	}
 
 	// Healthcheck

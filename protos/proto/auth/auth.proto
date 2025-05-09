@@ -1,7 +1,6 @@
 syntax = "proto3";
 
 import "google/api/annotations.proto";
-import "google/api/http.proto";
 
 package auth;
 
@@ -82,6 +81,7 @@ message IsAdminResponse{
 message RefreshTokenRequest {
   string refresh_token = 1;
   int32 app_id = 2;
+
 }
 
 message RefreshTokenResponse {
@@ -105,5 +105,6 @@ message ValidateTokenRequest {
 
 message ValidateTokenResponse {
   int64 user_id = 1;
-  bool is_valid = 2;
+  string email = 2;
+  bool is_valid = 3;
 }

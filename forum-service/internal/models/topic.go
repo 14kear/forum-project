@@ -7,5 +7,6 @@ type Topic struct {
 	Title     string
 	Content   string
 	UserID    int64
+	UserEmail string
 	CreatedAt time.Time
 }

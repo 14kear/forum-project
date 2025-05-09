@@ -3,7 +3,28 @@ version: "3"
 tasks:
   generate:
     aliases:
-      - gen
+      - "gen"
     desc: "Generate code from proto files"
     cmds:
-      - protoc -I proto -I googleapis   --go_out=gen/go --go_opt=paths=source_relative   --go-grpc_out=gen/go --go-grpc_opt=paths=source_relative   --grpc-gateway_out=gen/go --grpc-gateway_opt=paths=source_relative   proto/auth/auth.proto
+      - "protoc -I protos/proto -I protos/googleapis --go_out=protos/gen/go --go_opt=paths=source_relative   --go-grpc_out=protos/gen/go --go-grpc_opt=paths=source_relative   --grpc-gateway_out=protos/gen/go --grpc-gateway_opt=paths=source_relative   protos/proto/auth/auth.proto"
+
+  run_auth:
+    aliases:
+      - "auth"
+    desc: "Run auth service"
+    cmds:
+      - "go run auth-service/cmd/auth/main.go --config=auth-service/config/local.yaml"
+
+  run_forum:
+    aliases:
+      - "forum"
+    desc: "Run forum service"
+    cmds:
+      - "go run forum-service/cmd/forum/main.go"
+
+  migration:
+    aliases:
+      - "migrate"
+    desc: "Migrations created successfully!"
+    cmds:
+      - "go run forum-service/cmd/migrator/main.go --db-url=postgres://postgres:123456@localhost:5432/forum_db?sslmode=disable --migrations-path=forum-service/migrations"

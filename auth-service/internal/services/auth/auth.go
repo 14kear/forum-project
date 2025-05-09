@@ -222,14 +222,15 @@ func (auth *Auth) RefreshTokens(ctx context.Context, refreshToken string, appID 
 
 	email, ok := claims["email"].(string)
 	if !ok {
+		log.Error("missing email in token claims", slog.Any("claims", claims))
 		return "", "", fmt.Errorf("%s: email claim missing or invalid", op)
 	}
 
 	user, err := auth.userProvider.User(ctx, email)
 	if err != nil {
+		log.Error("user not found by email", slog.String("email", email), slog.Any("err", err))
 		return "", "", fmt.Errorf("%s: failed to get user: %w", op, err)
 	}
-
 	valid, err := auth.tokenStorage.IsRefreshTokenValid(ctx, user.ID, appID, refreshToken)
 	if err != nil {
 		return "", "", fmt.Errorf("%s: failed to validate refresh token: %w", op, err)
@@ -332,14 +333,14 @@ func (auth *Auth) GetAppSecret(ctx context.Context, appID int) (string, error) {
 }
 
 // ValidateToken валидирует access token! Валидация refresh token требует обращения к бд, поэтому реализована напрямую в RefreshTokens
-func (auth *Auth) ValidateToken(ctx context.Context, accessToken string, appID int) (int64, error) {
+func (auth *Auth) ValidateToken(ctx context.Context, accessToken string, appID int) (int64, string, error) {
 	const op = "auth.ValidateToken"
 	log := auth.log.With(slog.String("op", op))
 	log.Info("validating token")
 
 	app, err := auth.appProvider.App(ctx, appID)
 	if err != nil {
-		return 0, status.Errorf(codes.Internal, "%s: %v", op, err)
+		return 0, "", status.Errorf(codes.Internal, "%s: %v", op, err)
 	}
 
 	token, err := jwtGo.ParseWithClaims(accessToken, jwtGo.MapClaims{}, func(token *jwtGo.Token) (interface{}, error) {
@@ -349,32 +350,37 @@ func (auth *Auth) ValidateToken(ctx context.Context, accessToken string, appID i
 		return []byte(app.Secret), nil
 	})
 	if err != nil {
-		return 0, status.Errorf(codes.Unauthenticated, "%s: invalid token: %v", op, err)
+		return 0, "", status.Errorf(codes.Unauthenticated, "%s: invalid token: %v", op, err)
 	}
 
 	claims, ok := token.Claims.(jwtGo.MapClaims)
 	if !ok || !token.Valid {
-		return 0, status.Error(codes.Unauthenticated, op+": invalid token claims")
+		return 0, "", status.Error(codes.Unauthenticated, op+": invalid token claims")
 	}
 
 	if typ, ok := claims["typ"].(string); !ok || typ != "access" {
-		return 0, status.Errorf(codes.Unauthenticated, "%s: invalid token type: expected access, got %v", op, claims["typ"])
+		return 0, "", status.Errorf(codes.Unauthenticated, "%s: invalid token type: expected access, got %v", op, claims["typ"])
 	}
 
 	exp, ok := claims["exp"].(float64)
 	if !ok {
-		return 0, status.Errorf(codes.Unauthenticated, "%s: exp claim is missing or invalid", op)
+		return 0, "", status.Errorf(codes.Unauthenticated, "%s: exp claim is missing or invalid", op)
 	}
 	if time.Unix(int64(exp), 0).Before(time.Now()) {
-		return 0, status.Error(codes.Unauthenticated, op+": token is expired")
+		return 0, "", status.Error(codes.Unauthenticated, op+": token is expired")
 	}
 
 	uidFloat, ok := claims["uid"].(float64)
 	if !ok {
-		return 0, status.Errorf(codes.Unauthenticated, "%s: userID (uid) not found or invalid in token", op)
+		return 0, "", status.Errorf(codes.Unauthenticated, "%s: userID (uid) not found or invalid in token", op)
 	}
 	uid := int64(uidFloat)
 
+	email, ok := claims["email"].(string)
+	if !ok {
+		return 0, "", status.Errorf(codes.Unauthenticated, "%s: email claim missing or invalid", op)
+	}
+
 	log.Info("token validated successfully")
-	return uid, nil
+	return uid, email, nil
 }

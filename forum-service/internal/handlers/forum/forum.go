@@ -43,7 +43,19 @@ func (f *ForumHandler) CreateTopic(c *gin.Context) {
 		return
 	}
 
-	topicID, err := f.forumService.CreateTopic(c.Request.Context(), req.Title, req.Content, userID)
+	userEmailValue, exists := c.Get("userEmail")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	userEmail, ok := userEmailValue.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user email in context"})
+		return
+	}
+
+	topicID, err := f.forumService.CreateTopic(c.Request.Context(), req.Title, req.Content, userID, userEmail)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -88,7 +100,19 @@ func (f *ForumHandler) DeleteTopic(c *gin.Context) {
 		return
 	}
 
-	err = f.forumService.DeleteTopic(c.Request.Context(), topicID)
+	userIDValue, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user id in context"})
+		return
+	}
+
+	err = f.forumService.DeleteTopic(c.Request.Context(), topicID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -116,6 +140,18 @@ func (f *ForumHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
+	userEmailValue, exists := c.Get("userEmail")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	userEmail, ok := userEmailValue.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user email in context"})
+		return
+	}
+
 	topicIDStr := c.Param("id")
 	topicID, err := strconv.Atoi(topicIDStr)
 
@@ -124,7 +160,7 @@ func (f *ForumHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
-	commentID, err := f.forumService.CreateComment(c.Request.Context(), topicID, userID, req.Content)
+	commentID, err := f.forumService.CreateComment(c.Request.Context(), topicID, userID, req.Content, userEmail)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -201,7 +237,19 @@ func (f *ForumHandler) DeleteComment(c *gin.Context) {
 		return
 	}
 
-	err = f.forumService.DeleteComment(c.Request.Context(), commentID, topicID)
+	userIDValue, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user id in context"})
+		return
+	}
+
+	err = f.forumService.DeleteComment(c.Request.Context(), commentID, topicID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

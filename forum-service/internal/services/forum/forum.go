@@ -18,21 +18,23 @@ type Forum struct {
 }
 
 type TopicStorage interface {
-	SaveTopic(ctx context.Context, title, content string, userID int64) (int64, error)
+	SaveTopic(ctx context.Context, title, content string, userID int64, email string) (int64, error)
 	TopicByID(ctx context.Context, id int) (models.Topic, error)
 	Topics(ctx context.Context) ([]models.Topic, error)
 	DeleteTopic(ctx context.Context, id int) error
+	GetTopicAuthorID(ctx context.Context, id int) (int64, error)
 }
 
 type CommentStorage interface {
-	SaveComment(ctx context.Context, topicID int, userID int64, content string) (int64, error)
+	SaveComment(ctx context.Context, topicID int, userID int64, content string, email string) (int64, error)
 	CommentByID(ctx context.Context, id, topicID int, userID int64) (models.Comment, error)
 	CommentsByTopicID(ctx context.Context, topicID int) ([]models.Comment, error)
 	DeleteComment(ctx context.Context, id int, topicID int) error
+	GetCommentAuthorID(ctx context.Context, id int) (int64, error)
 }
 
 type ChatMessageStorage interface {
-	SaveChatMessage(ctx context.Context, userID int64, content string) (int64, error)
+	SaveChatMessage(ctx context.Context, userID int64, content string, email string) (int64, error)
 	ChatMessageByID(ctx context.Context, id int, userID int64) (models.ChatMessage, error)
 	ChatMessages(ctx context.Context) ([]models.ChatMessage, error)
 	DeleteChatMessage(ctx context.Context, id int) error
@@ -52,7 +54,7 @@ func NewForum(
 	}
 }
 
-func (f *Forum) CreateTopic(ctx context.Context, title, content string, userID int64) (int64, error) {
+func (f *Forum) CreateTopic(ctx context.Context, title, content string, userID int64, email string) (int64, error) {
 	const op = "forum.CreateTopic"
 
 	log := f.log.With(slog.String("op", op))
@@ -64,7 +66,7 @@ func (f *Forum) CreateTopic(ctx context.Context, title, content string, userID i
 		return 0, fmt.Errorf("%w: title or content is empty", ErrValidation)
 	}
 
-	topicID, err := f.topicStorage.SaveTopic(ctx, title, content, userID)
+	topicID, err := f.topicStorage.SaveTopic(ctx, title, content, userID, email)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -106,13 +108,22 @@ func (f *Forum) GetTopicByID(ctx context.Context, id int) (models.Topic, error) 
 	return topic, nil
 }
 
-func (f *Forum) DeleteTopic(ctx context.Context, id int) error {
+func (f *Forum) DeleteTopic(ctx context.Context, id int, userID int64) error {
 	const op = "forum.DeleteTopic"
 
 	log := f.log.With(slog.String("op", op))
 	log.Info("deleting topic")
 
-	err := f.topicStorage.DeleteTopic(ctx, id)
+	authorID, err := f.topicStorage.GetTopicAuthorID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("%s: unable to get topic author: %w", op, err)
+	}
+
+	if authorID != userID {
+		return fmt.Errorf("%s: user not authorized to delete this topic", op)
+	}
+
+	err = f.topicStorage.DeleteTopic(ctx, id)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -122,7 +133,7 @@ func (f *Forum) DeleteTopic(ctx context.Context, id int) error {
 	return nil
 }
 
-func (f *Forum) CreateComment(ctx context.Context, topicID int, userID int64, content string) (int64, error) {
+func (f *Forum) CreateComment(ctx context.Context, topicID int, userID int64, content string, email string) (int64, error) {
 	const op = "forum.CreateComment"
 
 	log := f.log.With(slog.String("op", op))
@@ -134,7 +145,7 @@ func (f *Forum) CreateComment(ctx context.Context, topicID int, userID int64, co
 		return 0, fmt.Errorf("%w: content is empty", ErrValidation)
 	}
 
-	commentID, err := f.commentStorage.SaveComment(ctx, topicID, userID, content)
+	commentID, err := f.commentStorage.SaveComment(ctx, topicID, userID, content, email)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -176,13 +187,22 @@ func (f *Forum) GetCommentByID(ctx context.Context, id int, topicID int, userID 
 	return comment, nil
 }
 
-func (f *Forum) DeleteComment(ctx context.Context, id int, topicID int) error {
+func (f *Forum) DeleteComment(ctx context.Context, id int, topicID int, userID int64) error {
 	const op = "forum.DeleteComment"
 
 	log := f.log.With(slog.String("op", op))
 	log.Info("deleting comment")
 
-	err := f.commentStorage.DeleteComment(ctx, id, topicID)
+	authorID, err := f.commentStorage.GetCommentAuthorID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("%s: unable to get comment author: %w", op, err)
+	}
+
+	if authorID != userID {
+		return fmt.Errorf("%s: user not authorized to delete this topic", op)
+	}
+
+	err = f.commentStorage.DeleteComment(ctx, id, topicID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -192,7 +212,7 @@ func (f *Forum) DeleteComment(ctx context.Context, id int, topicID int) error {
 	return nil
 }
 
-func (f *Forum) CreateChatMessage(ctx context.Context, userID int64, content string) (int64, error) {
+func (f *Forum) CreateChatMessage(ctx context.Context, userID int64, content string, email string) (int64, error) {
 	const op = "forum.CreateChatMessage"
 
 	log := f.log.With(slog.String("op", op))
@@ -204,7 +224,7 @@ func (f *Forum) CreateChatMessage(ctx context.Context, userID int64, content str
 		return 0, fmt.Errorf("%w: content is empty", ErrValidation)
 	}
 
-	chatMessageID, err := f.chatMessageStorage.SaveChatMessage(ctx, userID, content)
+	chatMessageID, err := f.chatMessageStorage.SaveChatMessage(ctx, userID, content, email)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}

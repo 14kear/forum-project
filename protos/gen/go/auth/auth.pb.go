@@ -577,7 +577,8 @@ func (x *ValidateTokenRequest) GetAppId() int32 {
 type ValidateTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	IsValid       bool                   `protobuf:"varint,2,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
+	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	IsValid       bool                   `protobuf:"varint,3,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -619,6 +620,13 @@ func (x *ValidateTokenResponse) GetUserId() int64 {
 	return 0
 }
 
+func (x *ValidateTokenResponse) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
 func (x *ValidateTokenResponse) GetIsValid() bool {
 	if x != nil {
 		return x.IsValid
@@ -630,7 +638,7 @@ var File_auth_auth_proto protoreflect.FileDescriptor
 
 const file_auth_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x0fauth/auth.proto\x12\x04auth\x1a\x1cgoogle/api/annotations.proto\x1a\x15google/api/http.proto\"C\n" +
+	"\x0fauth/auth.proto\x12\x04auth\x1a\x1cgoogle/api/annotations.proto\"C\n" +
 	"\x0fRegisterRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"+\n" +
@@ -660,10 +668,11 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"P\n" +
 	"\x14ValidateTokenRequest\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x15\n" +
-	"\x06app_id\x18\x02 \x01(\x05R\x05appId\"K\n" +
+	"\x06app_id\x18\x02 \x01(\x05R\x05appId\"a\n" +
 	"\x15ValidateTokenResponse\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x19\n" +
-	"\bis_valid\x18\x02 \x01(\bR\aisValid2\xf7\x03\n" +
+	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12\x19\n" +
+	"\bis_valid\x18\x03 \x01(\bR\aisValid2\xf7\x03\n" +
 	"\x04Auth\x12T\n" +
 	"\bRegister\x12\x15.auth.RegisterRequest\x1a\x16.auth.RegisterResponse\"\x19\x82\xd3\xe4\x93\x02\x13:\x01*\"\x0e/auth/register\x12H\n" +
 	"\x05Login\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponse\"\x16\x82\xd3\xe4\x93\x02\x10:\x01*\"\v/auth/login\x12U\n" +

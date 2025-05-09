@@ -35,7 +35,7 @@ func NewApp(log *slog.Logger, httpPort int, storagePath string, authGRPCAddr str
 	authClient := grpcclient.NewClient(conn)
 	authMiddleware := middleware.NewAuthMiddleware(authClient.AuthClient, 1)
 
-	httpApp := httpapp.NewApp(log, httpPort, forumService, forumServer, authMiddleware.Middleware())
+	httpApp := httpapp.NewApp(log, httpPort, forumServer, authMiddleware.Middleware())
 
 	return &App{
 		HTTPServer: httpApp,

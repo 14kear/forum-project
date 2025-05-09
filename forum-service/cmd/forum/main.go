@@ -21,7 +21,7 @@ const (
 )
 
 func main() {
-	cfg := config.Load("./config/local.yaml")
+	cfg := config.Load("forum-service/config/local.yaml")
 	log := setupLogger(cfg.Env)
 
 	application := app.NewApp(log, cfg.HTTP.Port, cfg.StoragePath, cfg.GRPC.Address)
