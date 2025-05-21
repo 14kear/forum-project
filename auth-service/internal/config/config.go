@@ -1,9 +1,8 @@
 package config
 
 import (
-	"flag"
 	"github.com/ilyakaznacheev/cleanenv"
-	"os"
+	"log"
 	"time"
 )
 
@@ -25,43 +24,11 @@ type HTTPConfig struct {
 	Port int `yaml:"port"`
 }
 
-func MustLoad() *Config {
-	configPath := fetchConfigPath()
-	if configPath == "" {
-		panic("config path is empty")
+func Load(path string) *Config {
+	var config Config
+	err := cleanenv.ReadConfig(path, &config)
+	if err != nil {
+		log.Fatalf("cannot read config: %s", err)
 	}
-
-	return MustLoadByPath(configPath)
-
-}
-
-func MustLoadByPath(path string) *Config {
-	// check if file exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		panic("config file does not exist: " + path)
-	}
-
-	var cfg Config
-
-	if err := cleanenv.ReadConfig(path, &cfg); err != nil {
-		panic("config path is empty: " + err.Error())
-	}
-
-	return &cfg
-}
-
-// fetchConfigPath fetches config path from command line flag or environment variable.
-// Priority: flag > env > default.
-// Default value is empty string.
-func fetchConfigPath() string {
-	var res string
-
-	flag.StringVar(&res, "config", "", "path to config file")
-	flag.Parse()
-
-	if res == "" {
-		res = os.Getenv("CONFIG_PATH")
-	}
-
-	return res
+	return &config
 }

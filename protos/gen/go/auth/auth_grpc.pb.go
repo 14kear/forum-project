@@ -31,15 +31,19 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Auth is service for managing permissions and roles.
+// Auth сервис для управления регистрацией, аутентификацией и ролями пользователей.
 type AuthClient interface {
-	// Register registers a new user.
+	// Регистрация нового пользователя.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
-	// Login logs in a user and returns an auth token.
+	// Вход пользователя с выдачей JWT токенов.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
+	// Проверка, является ли пользователь администратором.
 	IsAdmin(ctx context.Context, in *IsAdminRequest, opts ...grpc.CallOption) (*IsAdminResponse, error)
+	// Обновление JWT токенов по refresh токену.
 	RefreshTokens(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
+	// Выход пользователя — инвалидирует refresh токен.
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
+	// Валидация access токена (например, проверка срока действия).
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*ValidateTokenResponse, error)
 }
 
@@ -115,15 +119,19 @@ func (c *authClient) ValidateToken(ctx context.Context, in *ValidateTokenRequest
 // All implementations must embed UnimplementedAuthServer
 // for forward compatibility.
 //
-// Auth is service for managing permissions and roles.
+// Auth сервис для управления регистрацией, аутентификацией и ролями пользователей.
 type AuthServer interface {
-	// Register registers a new user.
+	// Регистрация нового пользователя.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
-	// Login logs in a user and returns an auth token.
+	// Вход пользователя с выдачей JWT токенов.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
+	// Проверка, является ли пользователь администратором.
 	IsAdmin(context.Context, *IsAdminRequest) (*IsAdminResponse, error)
+	// Обновление JWT токенов по refresh токену.
 	RefreshTokens(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
+	// Выход пользователя — инвалидирует refresh токен.
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
+	// Валидация access токена (например, проверка срока действия).
 	ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error)
 	mustEmbedUnimplementedAuthServer()
 }

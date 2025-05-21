@@ -5,7 +5,7 @@ import (
 	"errors"
 	"github.com/14kear/forum-project/auth-service/internal/app"
 	"github.com/14kear/forum-project/auth-service/internal/config"
-	"github.com/14kear/forum-project/auth-service/internal/lib/logger/handlers/slogpretty"
+	"github.com/14kear/forum-project/auth-service/utils"
 	gw "github.com/14kear/forum-project/protos/gen/go/auth"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/cors"
@@ -21,8 +21,8 @@ import (
 
 const (
 	envLocal = "local"
-	envProd  = "prod"
-	envDev   = "dev"
+	// envProd  = "prod"
+	envDev = "dev"
 )
 
 func main() {
@@ -33,9 +33,9 @@ func main() {
 		AllowCredentials: true,
 	})
 
-	cfg := config.MustLoad()
+	cfg := config.Load("auth-service/config/local.yaml")
 
-	log := setupLogger(cfg.Env)
+	log := utils.New(cfg.Env)
 
 	if cfg.Env == envLocal || cfg.Env == envDev {
 		log.Info("Starting auth service", slog.Any("config", cfg))
@@ -45,7 +45,6 @@ func main() {
 
 	application := app.NewApp(log, cfg.GRPC.Port, cfg.StoragePath, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 
-	// TODO: сделать отказоусточивость при падении одного из сервиса
 	go func() {
 		err := application.GRPCServer.Run()
 		if err != nil {
@@ -66,8 +65,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	mainMux := http.NewServeMux()
+
+	// grpc-gateway API
+	mainMux.Handle("/", mux)
+
+	// Swagger UI - отдаём статику из swagger/dist по пути /swagger-ui/
+	fsSwaggerUI := http.FileServer(http.Dir("auth-service/swagger/dist"))
+	mainMux.Handle("/swagger-ui/", http.StripPrefix("/swagger-ui/", fsSwaggerUI))
+
+	// Отдаём JSON спецификацию по точному пути
+	mainMux.HandleFunc("/swagger/apidocs.swagger.json", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "auth-service/swagger/apidocs.swagger.json")
+	})
+
 	// HTTP сервер с поддержкой CORS
-	handler := c.Handler(mux)
+	handler := c.Handler(mainMux)
 
 	gatewayServer := &http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.HTTP.Port),
@@ -101,35 +114,4 @@ func main() {
 
 	application.GRPCServer.Stop()
 	log.Info("Application stopped")
-}
-
-func setupLogger(env string) *slog.Logger {
-	var log *slog.Logger
-
-	switch env {
-	case envLocal:
-		log = setupPrettySlog()
-	case envDev:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-		)
-	case envProd:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
-		)
-	}
-
-	return log
-}
-
-func setupPrettySlog() *slog.Logger {
-	opts := slogpretty.PrettyHandlerOptions{
-		SlogOpts: &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		},
-	}
-
-	handler := opts.NewPrettyHandler(os.Stdout)
-
-	return slog.New(handler)
 }

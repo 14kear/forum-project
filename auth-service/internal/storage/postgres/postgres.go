@@ -91,7 +91,7 @@ func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 	err = row.Scan(&isAdmin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, fmt.Errorf("%s: %w", op, storage.ErrAppNotFound)
+			return false, fmt.Errorf("%s: %w", op, storage.ErrUserNotFound)
 		}
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
@@ -140,31 +140,6 @@ func (s *Storage) SaveToken(ctx context.Context, userID int64, appID int, token 
 	}
 
 	return id, nil
-}
-
-func (s *Storage) RevokeRefreshToken(ctx context.Context, userID int64, appID int, token string) error {
-	const op = "storage.postgres.RevokeRefreshToken"
-
-	stmt, err := s.db.Prepare("UPDATE refresh_tokens SET revoked = TRUE WHERE token = $1 AND user_id = $2 AND app_id = $3 RETURNING id")
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	defer stmt.Close()
-
-	affectedRows, err := stmt.ExecContext(ctx, token, userID, appID)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	rowsAffected, err := affectedRows.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("%s: no refresh token found for the given user and app", op)
-	}
-
-	return nil
 }
 
 func (s *Storage) IsRefreshTokenValid(ctx context.Context, userID int64, appID int, token string) (bool, error) {

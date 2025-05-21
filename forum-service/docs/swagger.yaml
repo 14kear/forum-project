@@ -1,0 +1,385 @@
+definitions:
+  chat.MessageResponse:
+    properties:
+      content:
+        type: string
+      id:
+        type: integer
+      userEmail:
+        type: string
+      userID:
+        type: integer
+    type: object
+  forum.CreateCommentRequest:
+    properties:
+      content:
+        type: string
+    required:
+    - content
+    type: object
+  forum.CreateTopicRequest:
+    properties:
+      content:
+        type: string
+      title:
+        type: string
+    required:
+    - content
+    - title
+    type: object
+  handlers.ErrorResponse:
+    properties:
+      error:
+        description: 'Пример: invalid input'
+        type: string
+    type: object
+  handlers.ListCommentsResponse:
+    properties:
+      comments:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
+    type: object
+  handlers.ListTopicsResponse:
+    properties:
+      topics:
+        items:
+          $ref: '#/definitions/models.Topic'
+        type: array
+    type: object
+  handlers.SingleCommentResponse:
+    properties:
+      comment:
+        $ref: '#/definitions/models.Comment'
+    type: object
+  handlers.SingleTopicResponse:
+    properties:
+      topic:
+        $ref: '#/definitions/models.Topic'
+    type: object
+  handlers.SuccessIDResponse:
+    properties:
+      id:
+        description: 'Пример: 123'
+        type: integer
+    type: object
+  models.Comment:
+    properties:
+      content:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: integer
+      topicID:
+        type: integer
+      userEmail:
+        type: string
+      userID:
+        type: integer
+    type: object
+  models.Topic:
+    properties:
+      content:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: integer
+      title:
+        type: string
+      userEmail:
+        type: string
+      userID:
+        type: integer
+    type: object
+info:
+  contact: {}
+paths:
+  /api/forum/topics:
+    get:
+      description: Retrieve list of topics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of topics
+          schema:
+            $ref: '#/definitions/handlers.ListTopicsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: List all forum topics
+      tags:
+      - topics
+    post:
+      consumes:
+      - application/json
+      description: Create a new topic in the forum
+      parameters:
+      - description: Topic data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/forum.CreateTopicRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created topic ID
+          schema:
+            $ref: '#/definitions/handlers.SuccessIDResponse'
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new forum topic
+      tags:
+      - topics
+  /api/forum/topics/{id}:
+    delete:
+      description: Delete topic by ID (authorized user only)
+      parameters:
+      - description: Topic ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid topic ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a topic
+      tags:
+      - topics
+    get:
+      description: Retrieve a single topic by its ID
+      parameters:
+      - description: Topic ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Topic data
+          schema:
+            $ref: '#/definitions/handlers.SingleTopicResponse'
+        "400":
+          description: Invalid topic ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Get topic by ID
+      tags:
+      - topics
+  /api/forum/topics/{id}/comments:
+    get:
+      description: Get all comments for given topic ID
+      parameters:
+      - description: Topic ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of comments
+          schema:
+            $ref: '#/definitions/handlers.ListCommentsResponse'
+        "400":
+          description: Invalid topic ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: List comments for a topic
+      tags:
+      - comments
+    post:
+      consumes:
+      - application/json
+      description: Add comment to topic by ID
+      parameters:
+      - description: Topic ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Comment data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/forum.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created comment ID
+          schema:
+            $ref: '#/definitions/handlers.SuccessIDResponse'
+        "400":
+          description: Invalid input or topic ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a comment on a topic
+      tags:
+      - comments
+  /api/forum/topics/{id}/comments/{commentID}:
+    delete:
+      description: Delete comment by comment ID and topic ID (authorized user only)
+      parameters:
+      - description: Topic ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Comment ID
+        in: path
+        name: commentID
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid topic or comment ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a comment
+      tags:
+      - comments
+    get:
+      description: Retrieve single comment by comment ID and topic ID
+      parameters:
+      - description: Topic ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Comment ID
+        in: path
+        name: commentID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Comment data
+          schema:
+            $ref: '#/definitions/handlers.SingleCommentResponse'
+        "400":
+          description: Invalid topic or comment ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Get comment by ID for a topic
+      tags:
+      - comments
+  /api/forum/ws/chat:
+    get:
+      description: Establishes a WebSocket connection for exchanging chat messages.
+        Used only for WebSocket clients. Requires `accessToken` in query parameters.
+      parameters:
+      - description: Access token for authentication
+        in: query
+        name: accessToken
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols – WebSocket connection established
+          schema:
+            type: string
+        "401":
+          description: Unauthorized – invalid or missing token
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: WebSocket endpoint for chat
+      tags:
+      - chat
+  /api/forum/ws/chat/messages:
+    get:
+      description: Returns a list of all messages from a chat
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of chat messages
+          schema:
+            items:
+              $ref: '#/definitions/chat.MessageResponse'
+            type: array
+        "500":
+          description: Failed to load messages
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Get all chat messages
+      tags:
+      - chat
+swagger: "2.0"

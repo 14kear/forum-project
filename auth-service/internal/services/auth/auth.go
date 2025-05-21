@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/14kear/forum-project/auth-service/internal/domain/models"
 	"github.com/14kear/forum-project/auth-service/internal/lib/jwt"
-	"github.com/14kear/forum-project/auth-service/internal/lib/logger/sl"
 	"github.com/14kear/forum-project/auth-service/internal/storage"
+	"github.com/14kear/sso-prettyslog/slogpretty/errors"
 	jwtGo "github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
@@ -36,7 +36,6 @@ type TokenOperation struct {
 
 type TokenStorage interface {
 	SaveToken(ctx context.Context, userID int64, appID int, token string, expiresAt time.Time) (int64, error)
-	RevokeRefreshToken(ctx context.Context, userID int64, appID int, token string) error
 	IsRefreshTokenValid(ctx context.Context, userID int64, appID int, token string) (bool, error)
 	DeleteRefreshToken(ctx context.Context, userID int64, appID int, token string) error
 }
@@ -56,9 +55,9 @@ type AppProvider interface {
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidAppID       = errors.New("invalid app id")
 	ErrUserExists         = errors.New("user already exists")
 	ErrUserNotFound       = errors.New("user not found")
+	ErrAppNotFound        = errors.New("app not found")
 )
 
 // NewAuth return a new instance of the Auth service
@@ -85,7 +84,7 @@ func NewAuth(
 // Login checks if user with given credentials exists in the system and returns access token.
 // If user exists, but password is incorrect, returns error.
 // If user doesn`t exist, returns error.
-func (auth *Auth) Login(ctx context.Context, email, password string, appID int) (string, string, error) {
+func (auth *Auth) Login(ctx context.Context, email, password string, appID int) (string, string, int64, error) {
 	const op = "auth.Login"
 
 	// БЕЗОПАСНОСТЬ! Мб вообще в будущем убрать логирование email
@@ -97,37 +96,37 @@ func (auth *Auth) Login(ctx context.Context, email, password string, appID int) 
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			auth.log.Warn("user not found", sl.Err(err))
-			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+			return "", "", 0, fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
 
 		auth.log.Warn("failed to get user", sl.Err(err))
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		return "", "", 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
 		auth.log.Info("invalid credentials", sl.Err(err))
-		return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		return "", "", 0, fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	app, err := auth.appProvider.App(ctx, appID)
 	if err != nil {
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		return "", "", 0, fmt.Errorf("%s: %w", op, err)
 	}
 	log.Info("successfully logged in")
 
 	tokenPair, err := jwt.NewTokenPair(user, app, auth.accessTokenTTL, auth.refreshTokenTTL)
 	if err != nil {
 		auth.log.Error("failed to generate token pair", sl.Err(err))
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		return "", "", 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	refreshTokenSave, errTokenSave := auth.tokenStorage.SaveToken(ctx, user.ID, appID, tokenPair.RefreshToken, time.Now().Add(auth.refreshTokenTTL))
 	if errTokenSave != nil {
 		auth.log.Error("failed to save refresh token", sl.Err(errTokenSave))
-		return "", "", fmt.Errorf("%s: failed to store refresh token with id %d : %w", op, refreshTokenSave, errTokenSave)
+		return "", "", 0, fmt.Errorf("%s: failed to store refresh token with id %d : %w", op, refreshTokenSave, errTokenSave)
 	}
 
-	return tokenPair.AccessToken, tokenPair.RefreshToken, nil
+	return tokenPair.AccessToken, tokenPair.RefreshToken, user.ID, nil
 }
 
 // RegisterNewUser registers new user in the system and returns user ID.
@@ -172,13 +171,13 @@ func (auth *Auth) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 
 	isAdmin, err := auth.userProvider.IsAdmin(ctx, userID)
 	if err != nil {
-		if errors.Is(err, storage.ErrAppNotFound) {
-			log.Warn("app not found", sl.Err(err))
-			return false, fmt.Errorf("%s: %w", op, ErrInvalidAppID)
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Warn("user not found", sl.Err(err))
+			return false, fmt.Errorf("%s: %w", op, ErrUserNotFound)
 		}
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
-	log.Info("user is admin", slog.Bool("isAdmin", isAdmin))
+	log.Info("checking successfully", slog.Bool("isAdmin", isAdmin))
 	return isAdmin, nil
 }
 
@@ -318,18 +317,6 @@ func (auth *Auth) Logout(ctx context.Context, refreshToken string, appID int) er
 
 	log.Info("successfully logged out user")
 	return nil
-}
-
-// GetAppSecret возвращает секрет приложения по appID (для проверки токенов)
-func (auth *Auth) GetAppSecret(ctx context.Context, appID int) (string, error) {
-	const op = "auth.GetAppSecret"
-
-	app, err := auth.appProvider.App(ctx, appID)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	return app.Secret, nil
 }
 
 // ValidateToken валидирует access token! Валидация refresh token требует обращения к бд, поэтому реализована напрямую в RefreshTokens

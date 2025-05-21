@@ -26,7 +26,7 @@ func (m *AuthMiddleware) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		// Устанавливаем CORS-заголовки для токенов
+		// CORS-заголовки для токенов
 		c.Header("Access-Control-Expose-Headers", "X-New-Access-Token, X-New-Refresh-Token")
 
 		accessToken := extractTokenFromHeader(c.GetHeader("Authorization"))
@@ -63,8 +63,19 @@ func (m *AuthMiddleware) Middleware() gin.HandlerFunc {
 			RefreshToken: refreshToken,
 			AppId:        int32(m.appID),
 		})
+
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token refresh failed"})
+			return
+		}
+
+		newValidateResp, err := m.authClient.ValidateToken(ctx, &ssov1.ValidateTokenRequest{
+			AccessToken: newTokens.AccessToken,
+			AppId:       int32(m.appID),
+		})
+
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token validation after refresh failed"})
 			return
 		}
 
@@ -75,8 +86,8 @@ func (m *AuthMiddleware) Middleware() gin.HandlerFunc {
 		// Обновляем токены в текущем запросе
 		c.Request.Header.Set("Authorization", "Bearer "+newTokens.AccessToken)
 		c.Request.Header.Set("X-Refresh-Token", newTokens.RefreshToken)
-		c.Set("userID", resp.GetUserId())
-		c.Set("userEmail", resp.GetEmail())
+		c.Set("userID", newValidateResp.GetUserId())
+		c.Set("userEmail", newValidateResp.GetEmail())
 
 		// Пропускаем запрос дальше с новыми токенами
 		c.Next()

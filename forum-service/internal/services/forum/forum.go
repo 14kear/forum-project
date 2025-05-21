@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/14kear/forum-project/forum-service/internal/models"
+	ssov1 "github.com/14kear/forum-project/protos/gen/go/auth"
 	"log/slog"
+	"time"
 )
 
 var ErrValidation = errors.New("validation error")
@@ -15,6 +17,7 @@ type Forum struct {
 	topicStorage       TopicStorage
 	commentStorage     CommentStorage
 	chatMessageStorage ChatMessageStorage
+	authService        ssov1.AuthClient
 }
 
 type TopicStorage interface {
@@ -27,7 +30,7 @@ type TopicStorage interface {
 
 type CommentStorage interface {
 	SaveComment(ctx context.Context, topicID int, userID int64, content string, email string) (int64, error)
-	CommentByID(ctx context.Context, id, topicID int, userID int64) (models.Comment, error)
+	CommentByID(ctx context.Context, id, topicID int) (models.Comment, error)
 	CommentsByTopicID(ctx context.Context, topicID int) ([]models.Comment, error)
 	DeleteComment(ctx context.Context, id int, topicID int) error
 	GetCommentAuthorID(ctx context.Context, id int) (int64, error)
@@ -35,9 +38,8 @@ type CommentStorage interface {
 
 type ChatMessageStorage interface {
 	SaveChatMessage(ctx context.Context, userID int64, content string, email string) (int64, error)
-	ChatMessageByID(ctx context.Context, id int, userID int64) (models.ChatMessage, error)
 	ChatMessages(ctx context.Context) ([]models.ChatMessage, error)
-	DeleteChatMessage(ctx context.Context, id int) error
+	DeleteChatMessagesBefore(ctx context.Context, before time.Time) error
 }
 
 func NewForum(
@@ -45,12 +47,14 @@ func NewForum(
 	topicStorage TopicStorage,
 	commentStorage CommentStorage,
 	chatMessageStorage ChatMessageStorage,
+	authService ssov1.AuthClient,
 ) *Forum {
 	return &Forum{
 		log:                log,
 		topicStorage:       topicStorage,
 		commentStorage:     commentStorage,
 		chatMessageStorage: chatMessageStorage,
+		authService:        authService,
 	}
 }
 
@@ -120,7 +124,16 @@ func (f *Forum) DeleteTopic(ctx context.Context, id int, userID int64) error {
 	}
 
 	if authorID != userID {
-		return fmt.Errorf("%s: user not authorized to delete this topic", op)
+		isAdminResp, err := f.authService.IsAdmin(ctx, &ssov1.IsAdminRequest{
+			UserId: userID,
+		})
+		if err != nil {
+			return fmt.Errorf("%s: failed to check admin rights: %w", op, err)
+		}
+
+		if !isAdminResp.IsAdmin {
+			return fmt.Errorf("%s: user not authorized to delete this topic", op)
+		}
 	}
 
 	err = f.topicStorage.DeleteTopic(ctx, id)
@@ -171,13 +184,13 @@ func (f *Forum) CommentsByTopicID(ctx context.Context, topicID int) ([]models.Co
 	return comments, nil
 }
 
-func (f *Forum) GetCommentByID(ctx context.Context, id int, topicID int, userID int64) (models.Comment, error) {
+func (f *Forum) GetCommentByID(ctx context.Context, id int, topicID int) (models.Comment, error) {
 	const op = "forum.GetCommentByID"
 
 	log := f.log.With(slog.String("op", op))
 	log.Info("getting comment by ID")
 
-	comment, err := f.commentStorage.CommentByID(ctx, id, topicID, userID)
+	comment, err := f.commentStorage.CommentByID(ctx, id, topicID)
 	if err != nil {
 		return models.Comment{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -199,7 +212,16 @@ func (f *Forum) DeleteComment(ctx context.Context, id int, topicID int, userID i
 	}
 
 	if authorID != userID {
-		return fmt.Errorf("%s: user not authorized to delete this topic", op)
+		isAdminResp, err := f.authService.IsAdmin(ctx, &ssov1.IsAdminRequest{
+			UserId: userID,
+		})
+		if err != nil {
+			return fmt.Errorf("%s: failed to check admin rights: %w", op, err)
+		}
+
+		if !isAdminResp.IsAdmin {
+			return fmt.Errorf("%s: user not authorized to delete this topic", op)
+		}
 	}
 
 	err = f.commentStorage.DeleteComment(ctx, id, topicID)
@@ -250,34 +272,20 @@ func (f *Forum) ListChatMessages(ctx context.Context) ([]models.ChatMessage, err
 	return chatMessages, nil
 }
 
-func (f *Forum) GetChatMessageByID(ctx context.Context, id int, userID int64) (models.ChatMessage, error) {
-	const op = "forum.GetChatMessageByID"
+func (f *Forum) CleanupOldMessages(ctx context.Context, olderThan time.Duration) error {
+	const op = "forum.CleanupOldMessages"
 
 	log := f.log.With(slog.String("op", op))
-	log.Info("getting chat message by ID")
+	log.Info("starting cleanup of old chat messages")
 
-	chatMessage, err := f.chatMessageStorage.ChatMessageByID(ctx, id, userID)
+	threshold := time.Now().Add(-olderThan)
+
+	err := f.chatMessageStorage.DeleteChatMessagesBefore(ctx, threshold)
 	if err != nil {
-		return models.ChatMessage{}, fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("chat message found", slog.Int("chatMessageID", chatMessage.ID))
-
-	return chatMessage, nil
-}
-
-func (f *Forum) DeleteChatMessage(ctx context.Context, id int) error {
-	const op = "forum.DeleteChatMessage"
-
-	log := f.log.With(slog.String("op", op))
-	log.Info("deleting chat message")
-
-	err := f.chatMessageStorage.DeleteChatMessage(ctx, id)
-	if err != nil {
+		log.Error("failed to delete old chat messages", slog.Any("error", err))
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	log.Info("chat message deleted", slog.Int("chatMessageID", id))
-
+	log.Info("old chat messages cleanup completed", slog.String("before", threshold.Format(time.RFC3339)))
 	return nil
 }

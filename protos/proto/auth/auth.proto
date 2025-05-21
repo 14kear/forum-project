@@ -6,16 +6,17 @@ package auth;
 
 option go_package = "14kear.sso.v1;ssov1";
 
-// Auth is service for managing permissions and roles.
+// Auth сервис для управления регистрацией, аутентификацией и ролями пользователей.
 service Auth {
-  // Register registers a new user.
+  // Регистрация нового пользователя.
   rpc Register (RegisterRequest) returns (RegisterResponse) {
     option (google.api.http) = {
       post: "/auth/register"
       body: "*"
     };
   }
-  // Login logs in a user and returns an auth token.
+
+  // Вход пользователя с выдачей JWT токенов.
   rpc Login (LoginRequest) returns (LoginResponse) {
     option (google.api.http) = {
       post: "/auth/login"
@@ -23,88 +24,134 @@ service Auth {
     };
   }
 
-  rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse) {
+  // Проверка, является ли пользователь администратором.
+  rpc IsAdmin (IsAdminRequest) returns (IsAdminResponse) {
     option (google.api.http) = {
       get: "/auth/admin/{user_id}"
     };
   }
 
-  rpc RefreshTokens(RefreshTokenRequest) returns (RefreshTokenResponse) {
+  // Обновление JWT токенов по refresh токену.
+  rpc RefreshTokens (RefreshTokenRequest) returns (RefreshTokenResponse) {
     option (google.api.http) = {
       post: "/auth/refresh"
       body: "*"
     };
   }
 
-  rpc Logout(LogoutRequest) returns (LogoutResponse) {
+  // Выход пользователя — инвалидирует refresh токен.
+  rpc Logout (LogoutRequest) returns (LogoutResponse) {
     option (google.api.http) = {
       post: "/auth/logout"
       body: "*"
     };
   }
 
-  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  // Валидация access токена (например, проверка срока действия).
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
 }
 
-// Объект, который отправляется при вызове RPC-метода (ручки) Register.
+// Запрос для регистрации нового пользователя.
 message RegisterRequest {
-  string email = 1; // Email of the user to register.
-  string password = 2; // Password of the user to register.
+  // Email пользователя.
+  string email = 1;
+
+  // Пароль пользователя.
+  string password = 2;
 }
 
-// Объект, который метод (ручка) вернёт.
+// Ответ при успешной регистрации.
 message RegisterResponse {
-  int64 user_id = 1; // User ID of the registered user.
+  // Уникальный идентификатор пользователя.
+  int64 user_id = 1;
 }
 
-// То же самое для метода Login()
+// Запрос для входа пользователя.
 message LoginRequest {
-  string email = 1; // Email of the user to login.
-  string password = 2; // Password of the user to login.
-  int32 app_id = 3; // ID of the app to login to.
+  // Email пользователя.
+  string email = 1;
+
+  // Пароль пользователя.
+  string password = 2;
+
+  // Идентификатор приложения, для которого производится вход.
+  int32 app_id = 3;
 }
 
+// Ответ с токенами после успешного входа.
 message LoginResponse {
-  string access_token = 1;  // Access JWT token
-  string refresh_token = 2; // Refresh JWT token
-}
-
-message IsAdminRequest{
-  int64 user_id = 1; // User ID to validate.
-}
-
-message IsAdminResponse{
-  bool is_admin = 1; // Indicates whether the user is an admin.
-}
-
-// Запрос на обновление access токена
-message RefreshTokenRequest {
-  string refresh_token = 1;
-  int32 app_id = 2;
-
-}
-
-message RefreshTokenResponse {
+  // Access JWT токен для авторизации.
   string access_token = 1;
+
+  // Refresh JWT токен для обновления access токена.
+  string refresh_token = 2;
+
+  // Идентификатор пользователя.
+  int64 user_id = 3;
+}
+
+// Запрос для проверки, является ли пользователь администратором.
+message IsAdminRequest {
+  // Идентификатор пользователя.
+  int64 user_id = 1;
+}
+
+// Ответ с результатом проверки.
+message IsAdminResponse {
+  // Флаг, указывающий, является ли пользователь администратором.
+  bool is_admin = 1;
+}
+
+// Запрос на обновление access токена с использованием refresh токена.
+message RefreshTokenRequest {
+  // Refresh токен.
+  string refresh_token = 1;
+
+  // Идентификатор приложения.
+  int32 app_id = 2;
+}
+
+// Ответ с обновленными токенами.
+message RefreshTokenResponse {
+  // Новый access токен.
+  string access_token = 1;
+
+  // Новый refresh токен.
   string refresh_token = 2;
 }
 
+// Запрос на выход пользователя (инвалидация refresh токена).
 message LogoutRequest {
+  // Refresh токен, который нужно инвалидировать.
   string refresh_token = 1;
+
+  // Идентификатор приложения.
   int32 app_id = 2;
 }
 
+// Ответ с сообщением об успешном выходе.
 message LogoutResponse {
+  // Сообщение статуса.
   string message = 1;
 }
 
+// Запрос на валидацию access токена.
 message ValidateTokenRequest {
+  // Access токен для проверки.
   string access_token = 1;
+
+  // Идентификатор приложения.
   int32 app_id = 2;
 }
 
+// Ответ с результатами валидации токена.
 message ValidateTokenResponse {
+  // Идентификатор пользователя, если токен валиден.
   int64 user_id = 1;
+
+  // Email пользователя.
   string email = 2;
+
+  // Флаг валидности токена.
   bool is_valid = 3;
 }

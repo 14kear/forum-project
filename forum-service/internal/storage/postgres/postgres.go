@@ -8,6 +8,7 @@ import (
 	"github.com/14kear/forum-project/forum-service/internal/models"
 	"github.com/14kear/forum-project/forum-service/internal/storage"
 	_ "github.com/lib/pq"
+	"time"
 )
 
 type Storage struct {
@@ -144,17 +145,17 @@ func (s *Storage) SaveComment(ctx context.Context, topicID int, userID int64, co
 	return id, nil
 }
 
-func (s *Storage) CommentByID(ctx context.Context, id, topicID int, userID int64) (models.Comment, error) {
+func (s *Storage) CommentByID(ctx context.Context, id, topicID int) (models.Comment, error) {
 	const op = "storage.postgres.Comment"
 
-	stmt, err := s.db.Prepare("SELECT id, topic_id, user_id, content, created_at, author_email FROM comments WHERE topic_id = $1 AND id = $2 AND user_id = $3")
+	stmt, err := s.db.Prepare("SELECT id, topic_id, user_id, content, created_at, author_email FROM comments WHERE topic_id = $1 AND id = $2")
 	if err != nil {
 		return models.Comment{}, fmt.Errorf("%s: %w", op, err)
 	}
 	defer stmt.Close()
 
 	var comment models.Comment
-	err = stmt.QueryRowContext(ctx, topicID, id, userID).Scan(
+	err = stmt.QueryRowContext(ctx, topicID, id).Scan(
 		&comment.ID,
 		&comment.TopicID,
 		&comment.UserID,
@@ -246,33 +247,6 @@ func (s *Storage) SaveChatMessage(ctx context.Context, userID int64, content str
 	return id, nil
 }
 
-func (s *Storage) ChatMessageByID(ctx context.Context, id int, userID int64) (models.ChatMessage, error) {
-	const op = "storage.postgres.ChatMessage"
-
-	stmt, err := s.db.Prepare("SELECT id, user_id, content, created_at, author_email FROM chat_messages WHERE id = $1")
-	if err != nil {
-		return models.ChatMessage{}, fmt.Errorf("%s: %w", op, err)
-	}
-	defer stmt.Close()
-
-	var msg models.ChatMessage
-	err = stmt.QueryRowContext(ctx, id).Scan(
-		&msg.ID,
-		&msg.UserID,
-		&msg.Content,
-		&msg.CreatedAt,
-		&msg.UserEmail,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return models.ChatMessage{}, fmt.Errorf("%s: %w", op, storage.ErrChatMessageNotFound)
-		}
-		return models.ChatMessage{}, fmt.Errorf("%s: %w", op, err)
-	}
-
-	return msg, nil
-}
-
 func (s *Storage) ChatMessages(ctx context.Context) ([]models.ChatMessage, error) {
 	const op = "storage.postgres.ChatMessages"
 
@@ -302,16 +276,16 @@ func (s *Storage) ChatMessages(ctx context.Context) ([]models.ChatMessage, error
 	return messages, nil
 }
 
-func (s *Storage) DeleteChatMessage(ctx context.Context, id int) error {
-	const op = "storage.postgres.DeleteChatMessage"
+func (s *Storage) DeleteChatMessagesBefore(ctx context.Context, before time.Time) error {
+	const op = "storage.postgres.DeleteChatMessagesBefore"
 
-	stmt, err := s.db.Prepare("DELETE FROM chat_messages WHERE id = $1")
+	stmt, err := s.db.Prepare("DELETE FROM chat_messages WHERE created_at < $1")
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, id)
+	res, err := stmt.ExecContext(ctx, before)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -320,8 +294,9 @@ func (s *Storage) DeleteChatMessage(ctx context.Context, id int) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
+
 	if rowsAffected == 0 {
-		return fmt.Errorf("%s: %w", op, storage.ErrChatMessageNotFound)
+		return nil
 	}
 
 	return nil

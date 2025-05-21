@@ -17,7 +17,7 @@ type Auth interface {
 		ctx context.Context,
 		email string,
 		password string,
-		appID int) (accessToken string, refreshToken string, err error)
+		appID int) (accessToken string, refreshToken string, userID int64, err error)
 	RegisterNewUser(
 		ctx context.Context,
 		email string,
@@ -29,7 +29,6 @@ type Auth interface {
 		appID int,
 	) (newAccessToken string, newRefreshToken string, err error)
 	Logout(ctx context.Context, refreshToken string, appID int) (err error)
-	GetAppSecret(ctx context.Context, appID int) (string, error)
 	ValidateToken(ctx context.Context, accessToken string, appID int) (int64, string, error)
 }
 
@@ -51,7 +50,7 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 		return nil, err
 	}
 
-	accessToken, refreshToken, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
+	accessToken, refreshToken, userID, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, "invalid email or password")
@@ -61,7 +60,8 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 
 	return &ssov1.LoginResponse{
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken}, nil
+		RefreshToken: refreshToken,
+		UserId:       userID}, nil
 }
 
 func (s *serverAPI) Register(ctx context.Context, req *ssov1.RegisterRequest) (*ssov1.RegisterResponse, error) {
